@@ -2,7 +2,11 @@ const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-require('dotenv').config();
+const path = require('path');
+const config = require('./config');
+require('dotenv').config({
+    path: process.env.NODE_ENV === 'production' ? '.env' : '.envLocal'
+});
 
 const app = express();
 
@@ -10,41 +14,62 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname)));
+app.use('/public', express.static(config.publicPath));
 
-// Servir archivos estáticos (en este caso, todos están en la raíz)
-app.use(express.static(__dirname)); // Servirá los archivos HTML y CSS desde la carpeta raíz.
+// Configuración de la conexión a la base de datos
+let connectionConfig;
 
-// Configuración de la conexión a la base de datos local
-const connectionConfig = {
-    host: process.env.MYSQLHOST || 'localhost', // Usará localhost por defecto si no se encuentra MYSQLHOST
-    user: process.env.MYSQLUSER || 'root', // Usuario por defecto
-    password: process.env.MYSQLPASSWORD || '', // Contraseña vacía por defecto
-    database: process.env.MYSQLDATABASE || 'restaurante', // Base de datos por defecto
-    port: process.env.MYSQLPORT || 3306 // Puerto por defecto de MySQL
-};
+if (process.env.NODE_ENV === 'production') {
+    // Configuración para Railway
+    connectionConfig = {
+        host: process.env.MYSQLHOST,
+        user: process.env.MYSQLUSER,
+        password: process.env.MYSQLPASSWORD,
+        database: process.env.MYSQLDATABASE,
+        port: process.env.MYSQLPORT || 3307,
+        ssl: {
+            rejectUnauthorized: false
+        },
+        connectTimeout: 10000
+    };
+} else {
+    // Configuración para desarrollo local
+    connectionConfig = {
+        host: 'localhost',
+        user: 'root',
+        password: '',
+        database: 'restaurante',
+        port: 3307
+    };
+}
 
 const connection = mysql.createConnection(connectionConfig);
 
-// Probar conexión a la base de datos
 connection.connect((err) => {
     if (err) {
-        console.error('Error connecting to the database:', err);
+        console.error('Error connecting to database:', err);
         return;
     }
     console.log('Connected to database successfully!');
 });
 
-// Servidor en ejecución
+// Rutas
+app.get('/', (req, res) => {
+    res.sendFile(config.indexPath);
+});
+
+app.get('/:page', (req, res) => {
+    const page = req.params.page;
+    res.sendFile(path.join(config.publicPath, `${page}.html`));
+});
+
+// Otras rutas...
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
 });
-
-// Ruta para servir la página de inicio
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html'); // Servir "index.html" como la página de inicio
-});
-
 
 // Ruta para agregar una categoría
 app.post('/categoria', (req, res) => {
