@@ -27,7 +27,7 @@ if (process.env.NODE_ENV === 'production') {
         user: process.env.MYSQLUSER,
         password: process.env.MYSQLPASSWORD,
         database: process.env.MYSQLDATABASE,
-        port: process.env.MYSQLPORT || 3307,
+        port: process.env.MYSQLPORT || 43505,
         ssl: {
             rejectUnauthorized: false
         },
@@ -56,8 +56,8 @@ connection.connect((err) => {
 
 // Ruta para la página de inicio (login)
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname,'index.html'));
-  });
+    res.sendFile(__dirname + '/index.html'); // Servir "index.html" como la página de inicio
+});
 
 // Otras rutas...
 
