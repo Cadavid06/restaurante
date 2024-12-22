@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consultas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Consultas</h1>
+    </div>
+
+    <div class="content">
+        <div class="box">
+            <h2>Consulta de Facturas por Fecha</h2>
+            <form id="facturasPorFechaForm">
+                <label for="fechaInicio">Fecha de inicio:</label>
+                <input type="date" id="fechaInicio" required>
+                <label for="fechaFin">Fecha de fin:</label>
+                <input type="date" id="fechaFin" required>
+                <select id="tipoConsulta">
+                    <option value="diaria">Diaria</option>
+                    <option value="semanal">Semanal</option>
+                    <option value="mensual">Mensual</option>
+                </select>
+                <button type="submit">Consultar</button>
+            </form>
+            <div id="resultadosFacturas"></div>
+        </div>
+
+        <div class="box">
+            <h2>Consulta de Empleados que Facturaron</h2>
+            <form id="empleadosFacturaronForm">
+                <label for="fechaInicioEmpleados">Fecha de inicio:</label>
+                <input type="date" id="fechaInicioEmpleados" required>
+                <label for="fechaFinEmpleados">Fecha de fin:</label>
+                <input type="date" id="fechaFinEmpleados" required>
+                <button type="submit">Consultar</button>
+            </form>
+            <div id="resultadosEmpleados"></div>
+        </div>
+
+        <div class="box">
+            <h2>Consulta de Productos Más Vendidos</h2>
+            <form id="productosMasVendidosForm">
+                <label for="fechaInicioProductos">Fecha de inicio:</label>
+                <input type="date" id="fechaInicioProductos" required>
+                <label for="fechaFinProductos">Fecha de fin:</label>
+                <input type="date" id="fechaFinProductos" required>
+                <label for="limiteProductos">Número de productos:</label>
+                <input type="number" id="limiteProductos" min="1" max="50" value="10" required>
+                <button type="submit">Consultar</button>
+            </form>
+            <div id="resultadosProductos"></div>
+        </div>
+    </div>
+
+    <div className="footer">
+        <li><a href="agg_products.html">Regresar</a></li>
+    </div>
+
+    <script>
+        document.getElementById('facturasPorFechaForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const fechaInicio = document.getElementById('fechaInicio').value;
+            const fechaFin = document.getElementById('fechaFin').value;
+            const tipoConsulta = document.getElementById('tipoConsulta').value;
+
+            fetch(`/consulta-facturas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&tipo=${tipoConsulta}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const resultadosDiv = document.getElementById('resultadosFacturas');
+                    const totalFacturas = data.totalFacturas || 0;
+                    const montoTotal = parseFloat(data.montoTotal || 0);
+
+                    resultadosDiv.innerHTML = `
+                        <h3>Resultados:</h3>
+                        <p>Total de facturas: ${totalFacturas}</p>
+                        <p>Monto total: $${montoTotal.toFixed(2)}</p>
+                    `;
+
+                    if (data.detalles && data.detalles.length > 0) {
+                        let detallesHTML = '<ul>';
+                        data.detalles.forEach(detalle => {
+                            const monto = parseFloat(detalle.monto || 0);
+                            detallesHTML += `
+                                <li>${detalle.fecha}: ${detalle.cantidad} facturas, $${monto.toFixed(2)}</li>
+                            `;
+                        });
+                        detallesHTML += '</ul>';
+                        resultadosDiv.innerHTML += detallesHTML;
+                    } else {
+                        resultadosDiv.innerHTML += '<p>No se encontraron resultados para el período seleccionado.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al consultar facturas. Por favor, intente nuevamente.');
+                });
+        });
+
+        document.getElementById('empleadosFacturaronForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const fechaInicio = document.getElementById('fechaInicioEmpleados').value;
+            const fechaFin = document.getElementById('fechaFinEmpleados').value;
+
+            fetch(`/consulta-empleados-facturaron?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const resultadosDiv = document.getElementById('resultadosEmpleados');
+                    
+                    if (data && data.length > 0) {
+                        let resultadosHTML = '<h3>Empleados que facturaron:</h3><ul>';
+                        data.forEach(empleado => {
+                            const montoTotal = parseFloat(empleado.montoTotal || 0);
+                            resultadosHTML += `
+                                <li>
+                                    ID: ${empleado.idEmpleado}, 
+                                    Nombre: ${empleado.nombre}, 
+                                    Facturas: ${empleado.totalFacturas || 0}, 
+                                    Monto total: $${montoTotal.toFixed(2)}
+                                </li>
+                            `;
+                        });
+                        resultadosHTML += '</ul>';
+                        resultadosDiv.innerHTML = resultadosHTML;
+                    } else {
+                        resultadosDiv.innerHTML = '<p>No se encontraron resultados para el período seleccionado.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al consultar empleados. Por favor, intente nuevamente.');
+                });
+        });
+
+        document.getElementById('productosMasVendidosForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const fechaInicio = document.getElementById('fechaInicioProductos').value;
+            const fechaFin = document.getElementById('fechaFinProductos').value;
+            const limite = document.getElementById('limiteProductos').value;
+
+            fetch(`/consulta-productos-mas-vendidos?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&limite=${limite}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const resultadosDiv = document.getElementById('resultadosProductos');
+                    
+                    if (data && data.length > 0) {
+                        let resultadosHTML = '<h3>Productos más vendidos:</h3><ol>';
+                        data.forEach(producto => {
+                            const montoTotal = parseFloat(producto.montoTotal || 0);
+                            resultadosHTML += `
+                                <li>
+                                    ${producto.descripcion} - 
+                                    Cantidad vendida: ${producto.cantidadVendida}, 
+                                    Monto total: $${montoTotal.toFixed(2)}
+                                </li>
+                            `;
+                        });
+                        resultadosHTML += '</ol>';
+                        resultadosDiv.innerHTML = resultadosHTML;
+                    } else {
+                        resultadosDiv.innerHTML = '<p>No se encontraron resultados para el período seleccionado.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al consultar productos más vendidos. Por favor, intente nuevamente.');
+                });
+        });
+    </script>
+</body>
+</html>

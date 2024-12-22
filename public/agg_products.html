@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agregar Producto</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <div>Agregar productos y categorías</div>
+    </div>
+
+    <div class="content">
+        <div class="box">
+            <form id="form-categoria">
+                <label for="nombre_cat">Categorías del restaurante:</label>
+                <input type="text" id="nombre_cat" name="nombre_cat" required>
+                <button type="submit">Guardar categoría</button>
+            </form>
+        </div>
+        <div class="box">
+            <form id="form-producto">
+                <label for="descripcion">Descripción del producto:</label>
+                <input type="text" id="descripcion" name="descripcion" required>
+        
+                <label for="categoria">Categoría:</label>
+                <select id="categoria" name="categoria">
+                    <!-- Las opciones de categoría se llenarán aquí -->
+                </select>
+        
+                <label for="precio">Precio:</label>
+                <input type="number" id="precio" name="precio" required>
+        
+                <button type="submit">Agregar Producto</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="footer">
+        <li><a href="gestion_admin.html">Gestionar categorías y productos</a></li>
+        <li><a href="consultas.html">Consultas</a></li>
+        <li><a href="index.html">Cerrar sesión</a></li>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            loadCategorias();
+        });
+
+        function loadCategorias() {
+            fetch('/categorias')
+                .then(response => response.json())
+                .then(data => {
+                    const categoriaSelect = document.getElementById('categoria');
+                    categoriaSelect.innerHTML = ''; // Limpiar opciones existentes
+                    data.forEach(categoria => {
+                        const option = document.createElement('option');
+                        option.value = categoria.idCategoria;
+                        option.textContent = categoria.nombre_categoria;
+                        categoriaSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error al cargar categorías:', error));
+        }
+
+        document.getElementById('form-categoria').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const nombre_cat = document.getElementById('nombre_cat').value;
+            fetch('/categoria', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ nombre_cat })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Categoría guardada:', data);
+                document.getElementById('form-categoria').reset();
+                loadCategorias();
+            })
+            .catch(error => console.error('Error al guardar la categoría:', error));
+        });
+
+        document.getElementById('form-producto').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const categoria = document.getElementById('categoria').value;
+            const precio = document.getElementById('precio').value;
+            const descripcion = document.getElementById('descripcion').value;
+
+            if (!categoria || !precio || !descripcion) {
+                console.error('Todos los campos son necesarios');
+                return;
+            }
+
+            fetch('/producto', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    idCategoria: categoria,
+                    descripcion,
+                    precio: parseFloat(precio),
+                    idAdmin: localStorage.getItem('idAdmin')
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error en la solicitud: ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Producto agregado:', data);
+                document.getElementById('form-producto').reset();
+            })
+            .catch(error => console.error('Error al agregar producto:', error));
+        });
+    </script>
+</body>
+</html>
