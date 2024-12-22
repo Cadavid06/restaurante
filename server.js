@@ -1,10 +1,7 @@
-
-const PDFDocument = require('pdfkit');
 const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -13,40 +10,41 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Configuración de la conexión a la base de datos
+// Servir archivos estáticos (en este caso, todos están en la raíz)
+app.use(express.static(__dirname)); // Servirá los archivos HTML y CSS desde la carpeta raíz.
+
+// Configuración de la conexión a la base de datos local
 const connectionConfig = {
-    host: process.env.MYSQLHOST,
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    port: process.env.MYSQLPORT,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    host: process.env.MYSQLHOST || 'localhost', // Usará localhost por defecto si no se encuentra MYSQLHOST
+    user: process.env.MYSQLUSER || 'root', // Usuario por defecto
+    password: process.env.MYSQLPASSWORD || '', // Contraseña vacía por defecto
+    database: process.env.MYSQLDATABASE || 'restaurante', // Base de datos por defecto
+    port: process.env.MYSQLPORT || 3306 // Puerto por defecto de MySQL
 };
 
 const connection = mysql.createConnection(connectionConfig);
 
+// Probar conexión a la base de datos
 connection.connect((err) => {
     if (err) {
-        console.error('Error connecting to database:', err);
+        console.error('Error connecting to the database:', err);
         return;
     }
     console.log('Connected to database successfully!');
 });
 
-
+// Servidor en ejecución
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
-// Ruta para la página de inicio (login)
+// Ruta para servir la página de inicio
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname,'index.html'));
+    res.sendFile(__dirname + '/index.html'); // Servir "index.html" como la página de inicio
 });
+
 
 // Ruta para agregar una categoría
 app.post('/categoria', (req, res) => {
