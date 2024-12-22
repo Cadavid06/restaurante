@@ -179,8 +179,42 @@ tr:hover {
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
+/* Breakpoints para pantallas pequeñas */
+@media (max-width: 1024px) {
+    .box {
+        width: calc(100% - 30px);
+    }
+
+    .header {
+        font-size: 20px;
+    }
+
+    button {
+        font-size: 14px;
+    }
+}
+
 @media (max-width: 768px) {
+    .content {
+        padding: 0 10px;
+    }
+
     .box {
         width: 100%;
+    }
+
+    body {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header {
+        font-size: 18px;
+        padding: 15px;
+    }
+
+    button {
+        padding: 10px 15px;
     }
 }
