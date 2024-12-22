@@ -27,7 +27,7 @@ if (process.env.NODE_ENV === 'production') {
         user: process.env.MYSQLUSER,
         password: process.env.MYSQLPASSWORD,
         database: process.env.MYSQLDATABASE,
-        port: process.env.MYSQLPORT || 43505,
+        port: process.env.MYSQLPORT || 3307,
         ssl: {
             rejectUnauthorized: false
         },
@@ -51,13 +51,13 @@ connection.connect((err) => {
         console.error('Error connecting to database:', err);
         return;
     }
-    console.log('Connected to database successfully!');
+    console.log('Connected to database successfully! https://restaurante-production-c024.up.railway.app/' );
 });
 
 // Ruta para la página de inicio (login)
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html'); // Servir "index.html" como la página de inicio
-});
+    res.sendFile(path.join(__dirname,'index.html'));
+  });
 
 // Otras rutas...
 
@@ -69,7 +69,7 @@ app.listen(PORT, () => {
 // Ruta para agregar una categoría
 app.post('/categoria', (req, res) => {
   const { nombre_cat } = req.body; // Cambia nombre_categoria a nombre_cat
-  const query = 'INSERT INTO Categoria (nombre_categoria) VALUES (?)';
+  const query = 'INSERT INTO categoria (nombre_categoria) VALUES (?)';
   connection.query(query, [nombre_cat], (err, result) => {
       if (err) return res.status(500).send(err);
       res.status(201).json({ id: result.insertId, nombre_categoria: nombre_cat });
@@ -78,7 +78,7 @@ app.post('/categoria', (req, res) => {
 
 // Ruta para obtener todas las categorías (para llenar el campo <option> en el HTML)
 app.get('/categorias', (req, res) => {
-  connection.query('SELECT * FROM Categoria', (err, results) => {
+  connection.query('SELECT * FROM categoria', (err, results) => {
       if (err) {
           console.error('Error al obtener categorías:', err);
           return res.status(500).send(err);
@@ -198,7 +198,7 @@ app.get('/productos', (req, res) => {
     const query = `
         SELECT c.nombre_categoria, p.idProducto, p.descripcion, p.precio
         FROM producto p
-        JOIN Categoria c ON p.idCategoria = c.idCategoria
+        JOIN categoria c ON p.idCategoria = c.idCategoria
     `;
     connection.query(query, (err, results) => {
         if (err) {
