@@ -51,7 +51,7 @@ connection.connect((err) => {
         console.error('Error connecting to database:', err);
         return;
     }
-    console.log('Connected to database successfully! https://restaurante-production-c024.up.railway.app/' );
+    console.log('Connected to database successfully!' );
 });
 
 // Ruta para la página de inicio (login)
