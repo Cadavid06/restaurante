@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "prod": "cross-env NODE_ENV=production node server.js"
+    "prod": "cross-env NODE_ENV=production node server.js",
+    "build": "react-scripts build"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
