@@ -27,7 +27,7 @@ if (process.env.NODE_ENV === 'production') {
         user: process.env.MYSQLUSER,
         password: process.env.MYSQLPASSWORD,
         database: process.env.MYSQLDATABASE,
-        port: process.env.MYSQLPORT || 3307,
+        port: process.env.MYSQLPORT,
         ssl: {
             rejectUnauthorized: false
         },
@@ -36,11 +36,11 @@ if (process.env.NODE_ENV === 'production') {
 } else {
     // Configuración para desarrollo local
     connectionConfig = {
-        host: 'localhost',
+        host: 'junction.proxy.rlwy.net',
         user: 'root',
-        password: '',
+        password: 'hZEymwPtDpaokWzhmTSOzvTAAjmZkFDi',
         database: 'restaurante',
-        port: 3307
+        port: 43505
     };
 }
 
