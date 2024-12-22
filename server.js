@@ -54,15 +54,10 @@ connection.connect((err) => {
     console.log('Connected to database successfully!');
 });
 
-// Rutas
+// Ruta para la página de inicio (login)
 app.get('/', (req, res) => {
-    res.sendFile(config.indexPath);
-});
-
-app.get('/:page', (req, res) => {
-    const page = req.params.page;
-    res.sendFile(path.join(config.publicPath, `${page}.html`));
-});
+    res.sendFile(path.join(__dirname,'index.html'));
+  });
 
 // Otras rutas...
 
