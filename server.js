@@ -477,7 +477,7 @@ app.get('/pedido/:id', (req, res) => {
     const query = `
         SELECT p.*, dp.idProducto, dp.cantidad, pr.descripcion
         FROM pedido p
-        JOIN detallepedido dp ON p.idPedido = dp.idPedido
+        JOIN detallePedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE p.idPedido = ?
     `;
@@ -528,22 +528,22 @@ app.put('/pedido/:id', (req, res) => {
             }
 
             // Luego eliminamos los detalles antiguos
-            const deleteDetallesQuery = 'DELETE FROM detallepedido WHERE idPedido = ?';
+            const deleteDetallesQuery = 'DELETE FROM detallePedido WHERE idPedido = ?';
             connection.query(deleteDetallesQuery, [idPedido], (error) => {
                 if (error) {
                     return connection.rollback(() => {
-                        console.error('Error deleting detallepedido:', error);
+                        console.error('Error deleting detallePedido:', error);
                         res.status(500).json({ error: 'Error al actualizar el pedido' });
                     });
                 }
 
                 // Insertamos los nuevos detalles
-                const insertDetalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES ?';
+                const insertDetalleQuery = 'INSERT INTO detallePedido (idPedido, idProducto, cantidad) VALUES ?';
                 const detalles = productos.map(p => [idPedido, p.idProducto, p.cantidad]);
                 connection.query(insertDetalleQuery, [detalles], (error) => {
                     if (error) {
                         return connection.rollback(() => {
-                            console.error('Error inserting new detallepedido:', error);
+                            console.error('Error inserting new detallePedido:', error);
                             res.status(500).json({ error: 'Error al actualizar el pedido' });
                         });
                     }
@@ -551,7 +551,7 @@ app.put('/pedido/:id', (req, res) => {
                     // Calculamos el nuevo total
                     const calcularTotalQuery = `
                         SELECT SUM(dp.cantidad * p.precio) as total
-                        FROM detallepedido dp
+                        FROM detallePedido dp
                         JOIN producto p ON dp.idProducto = p.idProducto
                         WHERE dp.idPedido = ?
                     `;
@@ -610,11 +610,11 @@ app.delete('/pedido/:id', (req, res) => {
             return;
         }
 
-        const deleteDetallesQuery = 'DELETE FROM detallepedido WHERE idPedido = ?';
+        const deleteDetallesQuery = 'DELETE FROM detallePedido WHERE idPedido = ?';
         connection.query(deleteDetallesQuery, [idPedido], (error) => {
             if (error) {
                 return connection.rollback(() => {
-                    console.error('Error deleting detallepedido:', error);
+                    console.error('Error deleting detallePedido:', error);
                     res.status(500).json({ error: 'Error al eliminar el pedido' });
                 });
             }
@@ -650,7 +650,7 @@ app.post('/generar-factura/:idPedido', (req, res) => {
     const queryPedido = `
         SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
         FROM pedido p
-        JOIN detallepedido dp ON p.idPedido = dp.idPedido
+        JOIN detallePedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE p.idPedido = ?
     `;
@@ -690,7 +690,7 @@ app.get('/factura/:idPedido', (req, res) => {
                (dp.cantidad * pr.precio) as subtotal
         FROM factura f
         JOIN pedido p ON f.idPedido = p.idPedido
-        JOIN detallepedido dp ON p.idPedido = dp.idPedido
+        JOIN detallePedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE f.idPedido = ?
     `;
@@ -864,7 +864,7 @@ app.get('/generar-factura-pdf/:idFactura', (req, res) => {
         FROM factura f
         JOIN pedido p ON f.idPedido = p.idPedido
         JOIN empleado e ON p.idEmpleado = e.idEmpleado
-        JOIN detallepedido dp ON p.idPedido = dp.idPedido
+        JOIN detallePedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE f.idFactura = ?
     `;
@@ -925,7 +925,7 @@ app.get('/consulta-productos-mas-vendidos', (req, res) => {
             SUM(dp.cantidad * p.precio) as montoTotal
         FROM 
             producto p
-            JOIN detallepedido dp ON p.idProducto = dp.idProducto
+            JOIN detallePedido dp ON p.idProducto = dp.idProducto
             JOIN pedido ped ON dp.idPedido = ped.idPedido
             JOIN factura f ON ped.idPedido = f.idPedido
         WHERE 
