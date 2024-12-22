@@ -1,40 +1,51 @@
-const express = require('express');
-const path = require('path');
-const mysql = require('mysql2');
 
 const PDFDocument = require('pdfkit');
+const express = require('express');
+const mysql = require('mysql2');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const path = require('path');
+require('dotenv').config();
 
-// Middleware para parsear el cuerpo de las solicitudes JSON
 const app = express();
-app.use(express.json());
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Crear conexión con la base de datos MySQL
-const connection = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  database: 'restaurante',
-  port: 3307 
-});
+// Configuración de la conexión a la base de datos
+const connectionConfig = {
+    host: process.env.MYSQLHOST,
+    user: process.env.MYSQLUSER,
+    password: process.env.MYSQLPASSWORD,
+    database: process.env.MYSQLDATABASE,
+    port: process.env.MYSQLPORT,
+    ssl: {
+        rejectUnauthorized: false
+    }
+};
 
-// Conectar a la base de datos
+const connection = mysql.createConnection(connectionConfig);
+
 connection.connect((err) => {
-  if (err) {
-    console.error('Error conectando a la base de datos:', err);
-    return;
-  }
-  console.log('Conexión a MySQL exitosa');
+    if (err) {
+        console.error('Error connecting to database:', err);
+        return;
+    }
+    console.log('Connected to database successfully!');
 });
 
 
-// Servidor escuchando en el puerto 3000
-app.listen(3000, () => {
-  console.log('Servidor escuchando en http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
 
 // Ruta para la página de inicio (login)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname,'index.html'));
 });
 
 // Ruta para agregar una categoría
