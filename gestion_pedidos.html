@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Pedidos</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div className="container">
+        <h1>Gestión de Pedidos</h1>
+        <table id="pedidosTable">
+            <thead>
+                <tr>
+                    <th>ID Pedido</th>
+                    <th>Fecha Pedido</th>
+                    <th>ID Empleado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="pedidosTableBody"></tbody>
+        </table>
+    </div>
+
+    <div id="editPedidoModal" className="modal">
+        <div className="modal-content">
+            <h2>Editar Pedido</h2>
+            <form id="editPedidoForm">
+                <input type="hidden" id="editPedidoId" />
+                <label for="editFechaPedido">Fecha Pedido:</label>
+                <input type="date" id="editFechaPedido" required />
+                <label htmlFor="editIdEmpleado">ID Empleado:</label>
+                <input type="number" id="editIdEmpleado" required />
+                <h3>Productos del Pedido</h3>
+                <div id="editProductosList"></div>
+                <h3>Añadir productos</h3>
+                <div className="add-product-section">
+                    <label htmlFor="productSelect">Producto:</label>
+                    <select id="productSelect"></select>
+                    <label htmlFor="productQuantity">Cantidad:</label>
+                    <input type="number" id="productQuantity" min="1" value="1" />
+                    <button type="button" onClick="addProductToPedido()">Añadir Producto</button>
+                </div>
+                <button type="submit">Guardar Cambios</button>
+                <button type="button" onClick="closeEditModal()">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="facturaModal" className="modal">
+        <div className="modal-content">
+            <h2>Información de la Factura</h2>
+            <div id="facturaInfo"></div>
+            <button onClick="closeFacturaModal()">Cerrar</button>
+        </div>
+    </div>
+
+    <div className="footer">
+        <li><a href="menu.html">Regresar al menú</a></li>
+    </div>
+
+    <script>
+        let allProducts = [];
+
+        function loadPedidos() {
+            fetch('/pedidos')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('pedidosTableBody');
+                    tableBody.innerHTML = '';
+                    data.forEach(pedido => {
+                        const row = `
+                            <tr>
+                                <td>${pedido.idPedido}</td>
+                                <td>${new Date(pedido.fechaPedido).toLocaleDateString()}</td>
+                                <td>${pedido.idEmpleado}</td>
+                                <td>
+                                    <button onClick="editPedido(${pedido.idPedido})">Editar</button>
+                                    <button onClick="deletePedido(${pedido.idPedido})">Eliminar</button>
+                                    <label htmlFor="metodoPago_${pedido.idPedido}">Método de pago:</label>
+                                    <select id="metodoPago_${pedido.idPedido}">
+                                        <option value="Efectivo">Efectivo</option>
+                                        <option value="Transferencia">Transferencia</option>
+                                    </select>
+                                    <button onClick="generarFactura(${pedido.idPedido})">Generar Factura</button>
+                                    <button onClick="mostrarFactura(${pedido.idPedido})">Mostrar Factura</button>
+                                </td>
+                            </tr>
+                        `;
+                        tableBody.innerHTML += row;
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function loadAllProducts() {
+            fetch('/productos')
+                .then(response => response.json())
+                .then(products => {
+                    allProducts = products;
+                    const productSelect = document.getElementById('productSelect');
+                    productSelect.innerHTML = '';
+                    products.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.idProducto;
+                        option.textContent = `${product.descripcion} - $${product.precio}`;
+                        productSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error loading products:', error));
+        }
+
+        function editPedido(idPedido) {
+            fetch(`/pedido/${idPedido}`)
+                .then(response => response.json())
+                .then(pedido => {
+                    document.getElementById('editPedidoId').value = pedido.idPedido;
+                    document.getElementById('editFechaPedido').value = new Date(pedido.fechaPedido).toISOString().split('T')[0];
+                    document.getElementById('editIdEmpleado').value = pedido.idEmpleado;
+                    
+                    const productosList = document.getElementById('editProductosList');
+                    productosList.innerHTML = '';
+                    pedido.productos.forEach(producto => {
+                        productosList.innerHTML += createProductRow(producto);
+                    });
+                    
+                    document.getElementById('editPedidoModal').style.display = 'block';
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function createProductRow(producto) {
+            return `
+                <div class="product-row" data-id="${producto.idProducto}">
+                    <select onchange="updateProductDescription(this)">
+                        ${allProducts.map(p => `<option value="${p.idProducto}" ${p.idProducto == producto.idProducto ? 'selected' : ''}>${p.descripcion} - $${p.precio}</option>`).join('')}
+                    </select>
+                    <input type="number" name="cantidad" value="${producto.cantidad}" min="1" onchange="updateProductQuantity(this)" />
+                    <button type="button" onClick="removeProductRow(this)">Eliminar</button>
+                </div>
+            `;
+        }
+
+        function updateProductDescription(select) {
+            const productRow = select.closest('.product-row');
+            productRow.dataset.id = select.value;
+        }
+
+        function updateProductQuantity(input) {
+            // La cantidad se actualiza automáticamente en el input
+        }
+
+        function removeProductRow(button) {
+            button.closest('.product-row').remove();
+        }
+
+        function addProductToPedido() {
+            const productSelect = document.getElementById('productSelect');
+            const quantityInput = document.getElementById('productQuantity');
+            const selectedProduct = allProducts.find(p => p.idProducto == productSelect.value);
+            
+            if (selectedProduct) {
+                const productosList = document.getElementById('editProductosList');
+                productosList.innerHTML += createProductRow({
+                    idProducto: selectedProduct.idProducto,
+                    descripcion: selectedProduct.descripcion,
+                    precio: selectedProduct.precio,
+                    cantidad: quantityInput.value
+                });
+            }
+
+            // Reset quantity input
+            quantityInput.value = 1;
+        }
+
+        function closeEditModal() {
+            document.getElementById('editPedidoModal').style.display = 'none';
+        }
+
+        document.getElementById('editPedidoForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const idPedido = document.getElementById('editPedidoId').value;
+            const fechaPedido = document.getElementById('editFechaPedido').value;
+            const idEmpleado = document.getElementById('editIdEmpleado').value;
+            
+            const productos = Array.from(document.getElementById('editProductosList').children).map(div => {
+                return {
+                    idProducto: div.dataset.id,
+                    cantidad: parseInt(div.querySelector('input[name="cantidad"]').value)
+                };
+            });
+
+            fetch(`/pedido/${idPedido}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ fechaPedido, idEmpleado, productos }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+                closeEditModal();
+                loadPedidos();
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        });
+
+        function deletePedido(idPedido) {
+            if (confirm('¿Está seguro de que desea eliminar este pedido?')) {
+                fetch(`/pedido/${idPedido}`, {
+                    method: 'DELETE',
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Success:', data);
+                    loadPedidos();
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+            }
+        }
+
+        function generarFactura(idPedido) {
+            const metodoPago = document.getElementById(`metodoPago_${idPedido}`).value;
+            fetch(`/generar-factura/${idPedido}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ metodoPago }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Factura generada:', data);
+                alert('Factura generada con éxito');
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                alert('Error al generar la factura');
+            });
+        }
+
+        function descargarFacturaPDF(idPedido) {
+            window.open(`/generar-factura-pdf/${idPedido}`, '_blank');
+        }
+
+        function mostrarFactura(idPedido) {
+            fetch(`/factura/${idPedido}`)
+                .then(response => response.json())
+                .then(factura => {
+                    if (factura) {
+                        const facturaInfo = document.getElementById('facturaInfo');
+                        let totalFactura = 0;
+                        
+                        const productosHTML = factura.productos.map(producto => {
+                            const subtotal = producto.cantidad * producto.precio;
+                            totalFactura += subtotal;
+                            return `
+                                <li>${producto.descripcion} - Cantidad: ${producto.cantidad} - Precio: $${producto.precio.toLocaleString()} - Subtotal: $${subtotal.toLocaleString()}</li>
+                            `;
+                        }).join('');
+
+                        facturaInfo.innerHTML = `
+                            <p><strong>ID Factura:</strong> ${factura.idFactura}</p>
+                            <p><strong>Fecha:</strong> ${new Date(factura.fechaFactura).toLocaleDateString()}</p>
+                            <p><strong>Método de Pago:</strong> ${factura.metodoPago}</p>
+                            <h3>Productos:</h3>
+                            <ul>
+                                ${productosHTML}
+                            </ul>
+                            <p><strong>Total:</strong> $${totalFactura.toLocaleString()}</p>
+                        `;
+                        document.getElementById('facturaModal').style.display = 'block';
+
+                        // Add download PDF button
+                        const downloadButton = document.createElement('button');
+                        downloadButton.textContent = 'Descargar PDF';
+                        downloadButton.onclick = () => downloadFacturaPDF(factura.idFactura);
+                        facturaInfo.appendChild(downloadButton);
+                    } else {
+                        alert('No se ha generado una factura para este pedido aún.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al obtener la información de la factura');
+                });
+        }
+
+        function downloadFacturaPDF(idFactura) {
+            window.open(`/generar-factura-pdf/${idFactura}`, '_blank');
+        }
+
+        
+
+        function closeFacturaModal() {
+            document.getElementById('facturaModal').style.display = 'none';
+        }
+
+        window.onload = () => {
+            loadPedidos();
+            loadAllProducts();
+        };
+    </script>
+</body>
+</html>
