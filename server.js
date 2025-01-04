@@ -36,11 +36,11 @@ if (process.env.NODE_ENV === 'production') {
 } else {
     // Configuración para desarrollo local
     connectionConfig = {
-        host: 'junction.proxy.rlwy.net',
+        host: 'roundhouse.proxy.rlwy.net',
         user: 'root',
-        password: 'hZEymwPtDpaokWzhmTSOzvTAAjmZkFDi',
+        password: 'tLqfvIyriQfGkwCILjZzXUIiYgeYwMwl',
         database: 'restaurante',
-        port: 43505
+        port: 41086
     };
 }
 
