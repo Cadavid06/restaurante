@@ -11,32 +11,27 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Configuración de la conexión a la base de datos
-const connectionConfig =
-  process.env.NODE_ENV === 'production'
-    ? {
-        host: process.env.MYSQLHOST,
-        user: process.env.MYSQLUSER,
-        password: process.env.MYSQLPASSWORD,
-        database: process.env.MYSQLDATABASE,
-        port: process.env.MYSQLPORT,
-        ssl: {
-          rejectUnauthorized: false
-        },
-        connectTimeout: 10000
-      }
-    : {
-        host: 'bsnyuud2rfuv84uwirvt-mysql.services.clever-cloud.com',
-        user: 'uslnto3osq3bw7kv',
-        password: 'tVm9YWljLunFiFivrH2E',
-        database: 'bsnyuud2rfuv84uwirvt',
-        port: 3306
-      };
+// Servir archivos estáticos - IMPORTANTE: asegúrate de que la ruta sea correcta
+app.use(express.static(path.join(__dirname)));
+app.use('/styles', express.static(path.join(__dirname, 'styles')));
+app.use('/css', express.static(path.join(__dirname, 'css')));
+
+// Configuración de la base de datos (tu configuración actual)
+const connectionConfig = {
+  host: process.env.MYSQLHOST || 'bsnyuud2rfuv84uwirvt-mysql.services.clever-cloud.com',
+  user: process.env.MYSQLUSER || 'uslnto3osq3bw7kv',
+  password: process.env.MYSQLPASSWORD || 'tVm9YWljLunFiFivrH2E',
+  database: process.env.MYSQLDATABASE || 'bsnyuud2rfuv84uwirvt',
+  port: process.env.MYSQLPORT || 3306,
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : undefined
+};
 
 const connection = mysql.createConnection(connectionConfig);
 
+// Verificar conexión a la base de datos
 connection.connect((err) => {
   if (err) {
     console.error('Error connecting to database:', err);
@@ -45,22 +40,27 @@ connection.connect((err) => {
   console.log('Connected to database successfully!');
 });
 
-// Ruta para la página de inicio (login)
+// Rutas
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Ruta de prueba para asegurarte de que el servidor está corriendo
-app.get('/ping', (req, res) => {
-  res.send('¡El servidor está funcionando correctamente!');
+// Ruta para verificar el estado del servidor
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Server is running' });
 });
 
-// Puerto dinámico
+// Manejo de errores 404
+app.use((req, res) => {
+  res.status(404).sendFile(path.join(__dirname, '404.html'));
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Servidor ejecutándose en el puerto ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
+module.exports = app;
 
 // Ruta para agregar una categoría
 app.post('/categoria', (req, res) => {
