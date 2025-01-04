@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <div>Gestión de Usuarios</div>
+    </div>
+
+    <div class="content">
+        <div class="box">
+            <h2>Lista de Usuarios</h2>
+            <table id="userTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Rol</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Los usuarios se cargarán aquí dinámicamente -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="box" id="editUserForm" style="display: none;">
+            <h2>Editar Usuario</h2>
+            <form id="userForm">
+                <input type="hidden" id="userId">
+                <div class="form-group">
+                    <label for="nombre">Nombre:</label>
+                    <input type="text" id="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Nueva Contraseña (dejar en blanco para no cambiar):</label>
+                    <input type="password" id="password">
+                </div>
+                <div class="form-group">
+                    <label for="role">Rol:</label>
+                    <select id="role" required>
+                        <option value="empleado">Empleado</option>
+                        <option value="administrador">Administrador</option>
+                    </select>
+                </div>
+                <button type="submit">Actualizar Usuario</button>
+                <button type="button" id="cancelEdit">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="footer">
+        <a href="crearUsers.html">Volver al panel de registro</a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const userTable = document.getElementById('userTable').getElementsByTagName('tbody')[0];
+            const userForm = document.getElementById('userForm');
+            const editUserForm = document.getElementById('editUserForm');
+            const cancelEditBtn = document.getElementById('cancelEdit');
+    
+            function loadUsers() {
+                fetch('/usuarios')
+                    .then(response => response.json())
+                    .then(users => {
+                        userTable.innerHTML = '';
+                        users.forEach(user => {
+                            const row = userTable.insertRow();
+                            row.innerHTML = `
+                                <td>${user.id}</td>
+                                <td>${user.nombre}</td>
+                                <td>${user.role}</td>
+                                <td>
+                                    <button onclick="editUser(${user.id})">Editar</button>
+                                    <button onclick="deleteUser(${user.id})">Eliminar</button>
+                                </td>
+                            `;
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error al cargar usuarios');
+                    });
+            }
+    
+            window.editUser = (id) => {
+                fetch(`/usuario/${id}`)
+                    .then(response => response.json())
+                    .then(user => {
+                        document.getElementById('userId').value = user.id;
+                        document.getElementById('nombre').value = user.nombre;
+                        document.getElementById('password').value = '';
+                        document.getElementById('role').value = user.role;
+                        editUserForm.style.display = 'block';
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error al cargar datos del usuario');
+                    });
+            };
+    
+            window.deleteUser = async (id) => {
+                if (confirm('¿Está seguro de que desea eliminar este usuario?')) {
+                    try {
+                        const response = await fetch(`/usuario/${id}`, { 
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            const data = await response.json();
+                            throw new Error(data.error || 'Error al eliminar usuario');
+                        }
+                        
+                        const data = await response.json();
+                        alert(data.message);
+                        loadUsers();
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert(error.message || 'Error al eliminar el usuario');
+                    }
+                }
+            };
+    
+            userForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const userId = document.getElementById('userId').value;
+                const userData = {
+                    nombre: document.getElementById('nombre').value,
+                    password: document.getElementById('password').value,
+                    role: document.getElementById('role').value
+                };
+    
+                fetch(`/usuario/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(userData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    editUserForm.style.display = 'none';
+                    loadUsers();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al actualizar usuario');
+                });
+            });
+    
+            cancelEditBtn.addEventListener('click', () => {
+                editUserForm.style.display = 'none';
+            });
+    
+            loadUsers();
+        });
+    </script>
+</body>
+</html>

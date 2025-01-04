@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Categorías y Productos</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Gestión de Categorías y Productos</h1>
+    </div>
+
+    <div class="content">
+        <!-- Categorías -->
+        <div class="box">
+            <h2>Categorías</h2>
+            <table id="categoriasTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Productos -->
+        <div class="box">
+            <h2>Productos</h2>
+            <table id="productosTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Descripción</th>
+                        <th>Precio</th>
+                        <th>Categoría</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Formulario de edición de categoría -->
+        <div id="editCategoriaForm" class="box" style="display: none;">
+            <h3>Editar Categoría</h3>
+            <form onsubmit="updateCategoria(); return false;">
+                <input type="hidden" id="categoriaId">
+                <label for="categoriaNombre">Nombre de la categoría:</label>
+                <input type="text" id="categoriaNombre" required>
+                <button type="submit">Guardar Cambios</button>
+                <button type="button" onclick="cancelEditCategoria()">Cancelar</button>
+            </form>
+        </div>
+
+        <!-- Formulario de edición de producto -->
+        <div id="editProductoForm" class="box" style="display: none;">
+            <h3>Editar Producto</h3>
+            <form onsubmit="updateProducto(); return false;">
+                <input type="hidden" id="productoId">
+                <label for="productoDescripcion">Descripción:</label>
+                <input type="text" id="productoDescripcion" required>
+                <label for="productoPrecio">Precio:</label>
+                <input type="number" id="productoPrecio" step="0.01" required>
+                <label for="productoCategoriaId">Categoría:</label>
+                <select id="productoCategoriaId" required></select>
+                <button type="submit">Guardar Cambios</button>
+                <button type="button" onclick="cancelEditProducto()">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="footer">
+        <li><a href="agg_products.html">Volver</a></li>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCategorias();
+            loadProductos();
+        });
+
+        // Cargar categorías
+        function loadCategorias() {
+            fetch('/categorias')
+                .then(response => response.json())
+                .then(categorias => {
+                    const tbody = document.querySelector('#categoriasTable tbody');
+                    tbody.innerHTML = '';
+                    categorias.forEach(categoria => {
+                        const row = tbody.insertRow();
+                        row.innerHTML = `
+                            <td>${categoria.idCategoria}</td>
+                            <td>${categoria.nombre_categoria}</td>
+                            <td>
+                                <button onclick="editCategoria(${categoria.idCategoria}, '${categoria.nombre_categoria}')">Editar</button>
+                                <button onclick="deleteCategoria(${categoria.idCategoria})">Eliminar</button>
+                            </td>
+                        `;
+                    });
+                })
+                .catch(error => console.error('Error al cargar categorías:', error));
+        }
+
+        // Cargar productos
+        function loadProductos() {
+            fetch('/productos')
+                .then(response => response.json())
+                .then(productos => {
+                    const tbody = document.querySelector('#productosTable tbody');
+                    tbody.innerHTML = '';
+                    productos.forEach(producto => {
+                        const row = tbody.insertRow();
+                        row.innerHTML = `
+                            <td>${producto.idProducto}</td>
+                            <td>${producto.descripcion}</td>
+                            <td>${producto.precio}</td>
+                            <td>${producto.nombre_categoria}</td>
+                            <td>
+                                <button onclick="editProducto(${producto.idProducto}, '${producto.descripcion}', ${producto.precio}, ${producto.idCategoria})">Editar</button>
+                                <button onclick="deleteProducto(${producto.idProducto})">Eliminar</button>
+                            </td>
+                        `;
+                    });
+                })
+                .catch(error => console.error('Error al cargar productos:', error));
+        }
+
+        // Editar categoría
+        function editCategoria(id, nombre) {
+            document.getElementById('categoriaId').value = id;
+            document.getElementById('categoriaNombre').value = nombre;
+            document.getElementById('editCategoriaForm').style.display = 'block';
+        }
+
+        // Actualizar categoría
+        function updateCategoria() {
+            const id = document.getElementById('categoriaId').value;
+            const nombre = document.getElementById('categoriaNombre').value;
+
+            fetch(`/categoria/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre_categoria: nombre })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                loadCategorias();
+                cancelEditCategoria();
+            })
+            .catch(error => console.error('Error al actualizar categoría:', error));
+        }
+
+        // Cancelar edición de categoría
+        function cancelEditCategoria() {
+            document.getElementById('editCategoriaForm').style.display = 'none';
+        }
+
+        // Editar producto
+        function editProducto(id, descripcion, precio, categoriaId) {
+            document.getElementById('productoId').value = id;
+            document.getElementById('productoDescripcion').value = descripcion;
+            document.getElementById('productoPrecio').value = precio;
+
+            fetch('/categorias')
+                .then(response => response.json())
+                .then(categorias => {
+                    const select = document.getElementById('productoCategoriaId');
+                    select.innerHTML = '';
+                    categorias.forEach(categoria => {
+                        const option = document.createElement('option');
+                        option.value = categoria.idCategoria;
+                        option.textContent = categoria.nombre_categoria;
+                        option.selected = categoria.idCategoria === categoriaId;
+                        select.appendChild(option);
+                    });
+                });
+
+            document.getElementById('editProductoForm').style.display = 'block';
+        }
+
+        // Actualizar producto
+        function updateProducto() {
+            const id = document.getElementById('productoId').value;
+            const descripcion = document.getElementById('productoDescripcion').value;
+            const precio = document.getElementById('productoPrecio').value;
+            const idCategoria = document.getElementById('productoCategoriaId').value;
+
+            fetch(`/producto/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ descripcion, precio, idCategoria })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                loadProductos();
+                cancelEditProducto();
+            })
+            .catch(error => console.error('Error al actualizar producto:', error));
+        }
+
+        // Cancelar edición de producto
+        function cancelEditProducto() {
+            document.getElementById('editProductoForm').style.display = 'none';
+        }
+
+        // Eliminar producto
+        function deleteProducto(id) {
+            if (confirm('¿Está seguro de que desea eliminar este producto?')) {
+                fetch(`/producto/${id}`, { method: 'DELETE' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        loadProductos();
+                    })
+                    .catch(error => console.error('Error al eliminar producto:', error));
+            }
+        }
+    </script>
+</body>
+</html>
