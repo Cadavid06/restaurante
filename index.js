@@ -2,69 +2,41 @@ const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const path = require('path');
 const config = require('./config');
-require('dotenv').config({
-    path: process.env.NODE_ENV === 'production' ? '.env' : '.envLocal'
-});
-
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname)));
-app.use('/public', express.static(config.publicPath));
 
-// Configuración de la conexión a la base de datos
-let connectionConfig;
-
-if (process.env.NODE_ENV === 'production') {
-    // Configuración para Railway
-    connectionConfig = {
-        host: process.env.MYSQLHOST,
-        user: process.env.MYSQLUSER,
-        password: process.env.MYSQLPASSWORD,
-        database: process.env.MYSQLDATABASE,
-        port: process.env.MYSQLPORT,
-        ssl: {
-            rejectUnauthorized: false
-        },
-        connectTimeout: 10000
-    };
-} else {
-    // Configuración para desarrollo local
-    connectionConfig = {
-        host: 'bsnyuud2rfuv84uwirvt-mysql.services.clever-cloud.com',
-        user: 'uslnto3osq3bw7kv',
-        password: 'tVm9YWljLunFiFivrH2E',
-        database: 'bsnyuud2rfuv84uwirvt',
-        port: 3306
-    };
-}
+// Conexión a la base de datos
+const connectionConfig = {
+  host: process.env.MYSQLHOST,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE,
+  port: process.env.MYSQLPORT,
+  ssl: { rejectUnauthorized: false },
+};
 
 const connection = mysql.createConnection(connectionConfig);
-
 connection.connect((err) => {
-    if (err) {
-        console.error('Error connecting to database:', err);
-        return;
-    }
-    console.log('Connected to database successfully!' );
+  if (err) {
+    console.error('Error connecting to database:', err);
+    return;
+  }
+  console.log('Connected to database successfully!');
 });
 
-// Ruta para la página de inicio (login)
+// Ruta para la página de inicio
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname,'index.html'));
-  });
-
-// Otras rutas...
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  res.send('Hello from Vercel!');
 });
+
+// Exportar la función manejadora
+module.exports = app;
+
 
 // Ruta para agregar una categoría
 app.post('/categoria', (req, res) => {
