@@ -2,25 +2,41 @@ const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const config = require('./config');
+const path = require('path');
+require('dotenv').config();
+
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Conexión a la base de datos
-const connectionConfig = {
-  host: process.env.MYSQLHOST,
-  user: process.env.MYSQLUSER,
-  password: process.env.MYSQLPASSWORD,
-  database: process.env.MYSQLDATABASE,
-  port: process.env.MYSQLPORT,
-  ssl: { rejectUnauthorized: false },
-};
+// Configuración de la conexión a la base de datos
+const connectionConfig =
+  process.env.NODE_ENV === 'production'
+    ? {
+        host: process.env.MYSQLHOST,
+        user: process.env.MYSQLUSER,
+        password: process.env.MYSQLPASSWORD,
+        database: process.env.MYSQLDATABASE,
+        port: process.env.MYSQLPORT,
+        ssl: {
+          rejectUnauthorized: false
+        },
+        connectTimeout: 10000
+      }
+    : {
+        host: 'bsnyuud2rfuv84uwirvt-mysql.services.clever-cloud.com',
+        user: 'uslnto3osq3bw7kv',
+        password: 'tVm9YWljLunFiFivrH2E',
+        database: 'bsnyuud2rfuv84uwirvt',
+        port: 3306
+      };
 
 const connection = mysql.createConnection(connectionConfig);
+
 connection.connect((err) => {
   if (err) {
     console.error('Error connecting to database:', err);
@@ -29,13 +45,21 @@ connection.connect((err) => {
   console.log('Connected to database successfully!');
 });
 
-// Ruta para la página de inicio
+// Ruta para la página de inicio (login)
 app.get('/', (req, res) => {
-  res.send('Hello from Vercel!');
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Exportar la función manejadora
-module.exports = app;
+// Ruta de prueba para asegurarte de que el servidor está corriendo
+app.get('/ping', (req, res) => {
+  res.send('¡El servidor está funcionando correctamente!');
+});
+
+// Puerto dinámico
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor ejecutándose en el puerto ${PORT}`);
+});
 
 
 // Ruta para agregar una categoría
