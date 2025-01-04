@@ -3,10 +3,7 @@ const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
-const config = require('./config');
-require('dotenv').config({
-    path: process.env.NODE_ENV === 'production' ? '.env' : '.envLocal'
-});
+require('dotenv').config();
 
 const app = express();
 
@@ -14,56 +11,41 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname)));
-app.use('/public', express.static(config.publicPath));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Configuración de la conexión a la base de datos
-let connectionConfig;
-
-if (process.env.NODE_ENV === 'production') {
-    // Configuración para Railway
-    connectionConfig = {
-        host: process.env.MYSQLHOST,
-        user: process.env.MYSQLUSER,
-        password: process.env.MYSQLPASSWORD,
-        database: process.env.MYSQLDATABASE,
-        port: process.env.MYSQLPORT,
-        ssl: {
-            rejectUnauthorized: false
-        },
-        connectTimeout: 10000
-    };
-} else {
-    // Configuración para desarrollo local
-    connectionConfig = {
-        host: 'roundhouse.proxy.rlwy.net',
-        user: 'root',
-        password: 'tLqfvIyriQfGkwCILjZzXUIiYgeYwMwl',
-        database: 'restaurante',
-        port: 41086
-    };
-}
+const connectionConfig = {
+  host: process.env.MYSQL_HOST,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  port: process.env.MYSQL_PORT,
+  ssl: {
+    rejectUnauthorized: false
+  },
+  connectTimeout: 10000
+};
 
 const connection = mysql.createConnection(connectionConfig);
 
 connection.connect((err) => {
-    if (err) {
-        console.error('Error connecting to database:', err);
-        return;
-    }
-    console.log('Connected to database successfully!' );
+  if (err) {
+    console.error('Error connecting to database:', err);
+    return;
+  }
+  console.log('Connected to database successfully!');
 });
 
 // Ruta para la página de inicio (login)
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname,'index.html'));
-  });
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-// Otras rutas...
+// Aquí van tus otras rutas...
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
 });
 
 // Ruta para agregar una categoría
