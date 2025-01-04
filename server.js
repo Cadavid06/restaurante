@@ -15,11 +15,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Configuración de la conexión a la base de datos
 const connectionConfig = {
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.MYSQL_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-  port: process.env.MYSQL_PORT,
+  host: process.env.MYSQLHOST,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE,
+  port: process.env.MYSQLPORT,
   ssl: {
     rejectUnauthorized: false
   },
