@@ -14,19 +14,14 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-
-// Servir archivos estáticos desde "Proyecto_bdd"
-app.use(express.static(path.join(__dirname, 'Proyecto_bdd')));
-
-// Ruta para la página de inicio (login)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Proyecto_bdd', 'index.html'));
-});
+app.use(express.static(path.join(__dirname)));
+app.use('/public', express.static(config.publicPath));
 
 // Configuración de la conexión a la base de datos
 let connectionConfig;
 
 if (process.env.NODE_ENV === 'production') {
+    // Configuración para Railway
     connectionConfig = {
         host: process.env.MYSQLHOST,
         user: process.env.MYSQLUSER,
@@ -39,6 +34,7 @@ if (process.env.NODE_ENV === 'production') {
         connectTimeout: 10000
     };
 } else {
+    // Configuración para desarrollo local
     connectionConfig = {
         host: 'bsnyuud2rfuv84uwirvt-mysql.services.clever-cloud.com',
         user: 'uslnto3osq3bw7kv',
@@ -55,15 +51,21 @@ connection.connect((err) => {
         console.error('Error connecting to database:', err);
         return;
     }
-    console.log('Connected to database successfully!');
+    console.log('Connected to database successfully!' );
 });
+
+// Ruta para la página de inicio (login)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname,'index.html'));
+  });
+
+// Otras rutas...
 
 // Servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
 });
-
 
 // Ruta para agregar una categoría
 app.post('/categoria', (req, res) => {
