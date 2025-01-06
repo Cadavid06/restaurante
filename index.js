@@ -3,6 +3,9 @@ const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const config = require('./config');
 require('dotenv').config({
     path: process.env.NODE_ENV === 'production' ? '.env' : '.envLocal'
@@ -14,35 +17,28 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname)));
 app.use('/public', express.static(config.publicPath));
 
 // Configuración de la conexión a la base de datos
-let connectionConfig;
-
-if (process.env.NODE_ENV === 'production') {
-    // Configuración para Railway
-    connectionConfig = {
+const connectionConfig = process.env.NODE_ENV === 'production'
+    ? {
         host: process.env.MYSQLHOST,
         user: process.env.MYSQLUSER,
         password: process.env.MYSQLPASSWORD,
         database: process.env.MYSQLDATABASE,
         port: process.env.MYSQLPORT,
-        ssl: {
-            rejectUnauthorized: false
-        },
+        ssl: { rejectUnauthorized: false },
         connectTimeout: 10000
-    };
-} else {
-    // Configuración para desarrollo local
-    connectionConfig = {
+    }
+    : {
         host: 'bsnyuud2rfuv84uwirvt-mysql.services.clever-cloud.com',
         user: 'uslnto3osq3bw7kv',
         password: 'tVm9YWljLunFiFivrH2E',
         database: 'bsnyuud2rfuv84uwirvt',
         port: 3306
     };
-}
 
 const connection = mysql.createConnection(connectionConfig);
 
@@ -51,15 +47,158 @@ connection.connect((err) => {
         console.error('Error connecting to database:', err);
         return;
     }
-    console.log('Connected to database successfully!' );
+    console.log('Connected to database successfully!');
 });
 
-// Ruta para la página de inicio (login)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname,'index.html'));
-  });
+// Middleware de autenticación
+function authenticateToken(req, res, next) {
+    const token = req.cookies.token;
 
-// Otras rutas...
+    if (!token) {
+        return res.status(401).json({ error: 'No autenticado' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET || 'tu_secreto_jwt', (err, user) => {
+        if (err) {
+            return res.status(401).json({ error: 'Token inválido' });
+        }
+        req.user = user;
+        next();
+    });
+}
+
+
+// Rutas públicas
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/crearUsers.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'crearUsers.html'));
+});
+
+// Ruta para verificar si el usuario está autenticado
+app.get('/isAuthenticated', (req, res) => {
+    const token = req.cookies.token;
+    if (!token) {
+        return res.json({ authenticated: false });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET || 'tu_secreto_jwt', (err, user) => {
+        if (err) {
+            return res.json({ authenticated: false });
+        }
+        res.json({ authenticated: true });
+    });
+});
+
+
+// Rutas protegidas
+const protectedPages = [
+    'agg_products.html',
+    'consultas.html',
+    'gestion_admin.html',
+    'gestion_pedidos.html',
+    'gestion_usuarios.html',
+    'menu.html'
+];
+
+protectedPages.forEach(page => {
+    app.get(`/${page}`, authenticateToken, (req, res) => {
+        res.sendFile(path.join(__dirname, page));
+    });
+});
+
+// Ruta para crear usuarios
+app.post('/crearUsuario', async (req, res) => {
+    const { email, password, role } = req.body;
+    console.log('Datos recibidos:', { email, role });
+
+    const checkUserQuery = `
+        SELECT 'administrador' as role FROM administrador WHERE nombre = ?
+        UNION ALL
+        SELECT 'empleado' as role FROM empleado WHERE nombre = ?
+    `;
+    connection.query(checkUserQuery, [email, email], async (err, results) => {
+        if (err) {
+            console.error('Error al verificar usuario existente:', err);
+            return res.status(500).json({ success: false, message: 'Error en la base de datos' });
+        }
+        if (results.length > 0) {
+            console.log('Usuario ya existe:', email);
+            return res.status(400).json({ success: false, message: 'El correo electrónico ya está registrado' });
+        }
+
+        try {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            const insertQuery = role === 'administrador'
+                ? 'INSERT INTO administrador (nombre, contraseña) VALUES (?, ?)'
+                : 'INSERT INTO empleado (nombre, contraseña) VALUES (?, ?)';
+            
+            connection.query(insertQuery, [email, hashedPassword], (insertErr) => {
+                if (insertErr) {
+                    console.error('Error al insertar nuevo usuario:', insertErr);
+                    return res.status(500).json({ success: false, message: 'Error al crear el usuario' });
+                }
+                console.log('Usuario creado exitosamente:', email);
+                res.status(201).json({ success: true, message: 'Usuario creado exitosamente' });
+            });
+        } catch (hashError) {
+            console.error('Error al hashear la contraseña:', hashError);
+            res.status(500).json({ success: false, message: 'Error al procesar la contraseña' });
+        }
+    });
+});
+
+// Ruta para iniciar sesión
+app.post('/login', (req, res) => {
+    const { email, password } = req.body;
+
+    const query = `
+        SELECT 'administrador' as role, idAdmin as id, nombre, contraseña FROM administrador WHERE nombre = ?
+        UNION ALL
+        SELECT 'empleado' as role, idEmpleado as id, nombre, contraseña FROM empleado WHERE nombre = ?
+    `;
+    connection.query(query, [email, email], async (err, results) => {
+        if (err) {
+            console.error('Error en la base de datos durante el login:', err);
+            return res.status(500).json({ success: false, message: 'Error en la base de datos' });
+        }
+        if (results.length === 0) {
+            return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos' });
+        }
+
+        const user = results[0];
+        try {
+            const validPassword = await bcrypt.compare(password, user.contraseña);
+            if (!validPassword) {
+                return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos' });
+            }
+
+            const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'tu_secreto_jwt', { expiresIn: '1h' });
+
+            res.cookie('token', token, { 
+                httpOnly: true, 
+                secure: process.env.NODE_ENV === 'production', 
+                maxAge: 3600000 // 1 hora
+            });
+
+            res.json({
+                success: true,
+                role: user.role
+            });
+        } catch (compareError) {
+            console.error('Error al comparar contraseñas:', compareError);
+            res.status(500).json({ success: false, message: 'Error al procesar la autenticación' });
+        }
+    });
+});
+
+// Ruta para cerrar sesión
+app.post('/logout', (req, res) => {
+    res.clearCookie('token');
+    res.json({ success: true, message: 'Sesión cerrada exitosamente' });
+});
 
 // Servidor
 const PORT = process.env.PORT || 3000;
@@ -89,70 +228,6 @@ app.get('/categorias', (req, res) => {
   });
 });
 
-// Ruta para crear usuarios
-app.post('/crearUsuario', (req, res) => {
-    const { nombre, password, role } = req.body; 
-  
-    let query;
-    if (role === 'empleado') {
-        query = 'INSERT INTO empleado (nombre, contraseña) VALUES (?, ?)'; 
-    } else if (role === 'administrador') {
-        query = 'INSERT INTO administrador (nombre, contraseña) VALUES (?, ?)'; 
-    } else {
-        return res.status(400).json({ success: false, message: 'Rol no válido' });
-    }
-  
-    // Aquí estamos insertando la contraseña tal cual
-    connection.query(query, [nombre, password], (err) => { 
-        if (err) return res.status(500).json({ success: false, error: err });
-        res.status(201).json({ success: true });
-    });
-});
-
-// Ruta para iniciar sesión
-app.post('/login', (req, res) => {
-    const { nombre, contraseña } = req.body;
-
-    // Buscar en la tabla de empleados
-    connection.query('SELECT * FROM empleado WHERE nombre = ?', [nombre], (err, employeeResults) => {
-        if (err) {
-            return res.status(500).json({ success: false, message: 'Error en la base de datos' });
-        }
-        // Verifica si se encontró un empleado
-        if (employeeResults.length > 0) {
-            if (employeeResults[0].contraseña === contraseña) {
-                return res.status(200).json({ 
-                    success: true, 
-                    role: 'empleado',
-                    idEmpleado: employeeResults[0].idEmpleado  // Añadimos el idEmpleado aquí
-                });
-            } else {
-                return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
-            }
-        }
-
-        // Si no se encuentra, buscar en la tabla de administradores
-        connection.query('SELECT * FROM administrador WHERE nombre = ?', [nombre], (err, adminResults) => {
-            if (err) {
-                return res.status(500).json({ success: false, message: 'Error en la base de datos' });
-            }
-            // Verifica si se encontró un administrador
-            if (adminResults.length > 0) {
-                if (adminResults[0].contraseña === contraseña) {
-                    return res.status(200).json({ 
-                        success: true, 
-                        role: 'administrador', 
-                        idAdmin: adminResults[0].idAdmin
-                    });
-                } else {
-                    return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
-                }
-            }
-            // Si no se encuentra ningún usuario
-            return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
-        });
-    });
-});
 
 // Ruta para agregar un producto
 app.post('/producto', (req, res) => {

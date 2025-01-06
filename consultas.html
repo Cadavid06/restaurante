@@ -56,8 +56,9 @@
         </div>
     </div>
 
-    <div className="footer">
+    <div class="footer">
         <li><a href="agg_products.html">Regresar</a></li>
+        <button onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
 
     <script>
@@ -184,6 +185,29 @@
                     alert('Error al consultar productos más vendidos. Por favor, intente nuevamente.');
                 });
         });
+        fetch('/isAuthenticated')
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/';
+            }
+        })
+        .catch(error => {
+            console.error('Error al verificar autenticación:', error);
+            window.location.href = '/';
+        });
+
+    
+        // Función para cerrar sesión
+        function cerrarSesion() {
+            fetch('/logout', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/';
+                }
+            })
+            .catch(error => console.error('Error al cerrar sesión:', error));
+        }
     </script>
 </body>
 </html>

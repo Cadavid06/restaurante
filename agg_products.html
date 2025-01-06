@@ -39,8 +39,9 @@
 
     <div class="footer">
         <li><a href="gestion_admin.html">Gestionar categorías y productos</a></li>
+        <li><a href="gestion_usuarios.html">Gestionar usuarios</a></li>
         <li><a href="consultas.html">Consultas</a></li>
-        <li><a href="index.html">Cerrar sesión</a></li>
+        <button onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
 
     <script>
@@ -118,6 +119,31 @@
             })
             .catch(error => console.error('Error al agregar producto:', error));
         });
+
+        fetch('/isAuthenticated')
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/';
+            }
+        })
+        .catch(error => {
+            console.error('Error al verificar autenticación:', error);
+            window.location.href = '/';
+        });
+
+    
+        // Función para cerrar sesión
+        function cerrarSesion() {
+            fetch('/logout', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/';
+                }
+            })
+            .catch(error => console.error('Error al cerrar sesión:', error));
+        }
+
     </script>
 </body>
 </html>

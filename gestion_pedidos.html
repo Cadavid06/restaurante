@@ -57,6 +57,7 @@
 
     <div className="footer">
         <li><a href="menu.html">Regresar al menú</a></li>
+        <button onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
 
     <script>
@@ -305,6 +306,29 @@
             loadPedidos();
             loadAllProducts();
         };
+        fetch('/isAuthenticated')
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/';
+            }
+        })
+        .catch(error => {
+            console.error('Error al verificar autenticación:', error);
+            window.location.href = '/';
+        });
+
+    
+        // Función para cerrar sesión
+        function cerrarSesion() {
+            fetch('/logout', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/';
+                }
+            })
+            .catch(error => console.error('Error al cerrar sesión:', error));
+        }
     </script>
 </body>
 </html>
