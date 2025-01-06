@@ -120,16 +120,7 @@
             .catch(error => console.error('Error al agregar producto:', error));
         });
 
-        fetch('/isAuthenticated')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('No autenticado');
-            }
-        })
-        .catch(error => {
-            console.error('Error al verificar autenticación:', error);
-            window.location.href = '/';
-        });
+
 
 
     
