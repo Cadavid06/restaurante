@@ -90,7 +90,7 @@ app.get('/isAuthenticated', (req, res) => {
         }
         res.json({ authenticated: true });
     });
-});
+}); 
 
 
 // Rutas protegidas
