@@ -35,10 +35,23 @@
     </div>
 
     <div class="footer">
-        <button onclick="cerrarSesion()">Cerrar Sesión</button>
+        <button id="logoutButton">Cerrar sesión</button>
     </div>
     
     <script>
+
+    fetch('/isAuthenticated')
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('No autenticado');
+        }
+    })
+    .catch(() => {
+        // Redirige al login si no está autenticado
+        window.location.href = '/';
+    });
+
+
         document.addEventListener('DOMContentLoaded', async () => {
             const menuContent = document.getElementById('menuContent');
             const pedidoResumen = document.getElementById('pedidoResumen');
@@ -173,17 +186,14 @@
             ));
         });
 
-        // Función para cerrar sesión
-        function cerrarSesion() {
-            fetch('/logout', { method: 'POST' })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.href = '/';
-                }
+    document.getElementById('logoutButton').addEventListener('click', () => {
+        fetch('/logout', { method: 'POST' })
+            .then(() => {
+                // Redirige al login
+                window.location.href = '/';
             })
             .catch(error => console.error('Error al cerrar sesión:', error));
-        }
+    });
     </script>
 </body>
 </html>

@@ -94,6 +94,7 @@ app.get('/isAuthenticated', (req, res) => {
 }); 
 
 
+
 // Rutas protegidas
 const protectedPages = [
     'agg_products.html',
@@ -106,6 +107,7 @@ const protectedPages = [
 
 protectedPages.forEach(page => {
     app.get(`/${page}`, authenticateToken, (req, res) => {
+        res.set('Cache-Control', 'no-store'); // Desactiva el caché
         res.sendFile(path.join(__dirname, page));
     });
 });
@@ -197,9 +199,11 @@ app.post('/login', (req, res) => {
 
 // Ruta para cerrar sesión
 app.post('/logout', (req, res) => {
-    res.clearCookie('token');
-    res.json({ success: true, message: 'Sesión cerrada exitosamente' });
+    // Borra la cookie del token
+    res.clearCookie('token'); 
+    res.redirect('/'); // Redirige al login
 });
+
 
 // Servidor
 const PORT = process.env.PORT || 3000;
