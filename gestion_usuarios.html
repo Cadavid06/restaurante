@@ -170,10 +170,10 @@
             }
         });
         
-            fetch('/isAuthenticated')
+        fetch('/isAuthenticated')
         .then(response => {
-            if (response.status === 401) {
-                window.location.href = '/';
+            if (!response.ok) {
+                throw new Error('No autenticado');
             }
         })
         .catch(error => {
@@ -181,7 +181,6 @@
             window.location.href = '/';
         });
 
-    
         // Función para cerrar sesión
         function cerrarSesion() {
             fetch('/logout', { method: 'POST' })

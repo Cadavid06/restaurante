@@ -187,14 +187,15 @@
         });
         fetch('/isAuthenticated')
         .then(response => {
-            if (response.status === 401) {
-                window.location.href = '/';
+            if (!response.ok) {
+                throw new Error('No autenticado');
             }
         })
         .catch(error => {
             console.error('Error al verificar autenticación:', error);
             window.location.href = '/';
         });
+
 
     
         // Función para cerrar sesión

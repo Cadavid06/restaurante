@@ -55,17 +55,18 @@ function authenticateToken(req, res, next) {
     const token = req.cookies.token;
 
     if (!token) {
-        return res.status(401).json({ error: 'No autenticado' });
+        return res.redirect('/'); // Redirige al login si no hay token
     }
 
     jwt.verify(token, process.env.JWT_SECRET || 'tu_secreto_jwt', (err, user) => {
         if (err) {
-            return res.status(401).json({ error: 'Token inválido' });
+            return res.redirect('/'); // Redirige al login si el token es inválido
         }
         req.user = user;
         next();
     });
 }
+
 
 
 // Rutas públicas
