@@ -25,7 +25,7 @@ app.use('/public', express.static(config.publicPath));
 const connectionConfig = process.env.NODE_ENV === 'production'
     ? {
         host: process.env.MYSQLHOST,
-        user: process.env.MYSQLUSER,
+        user: process.env.MYSQLUSER,   
         password: process.env.MYSQLPASSWORD,
         database: process.env.MYSQLDATABASE,
         port: process.env.MYSQLPORT,
