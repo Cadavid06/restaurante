@@ -52,7 +52,7 @@
                 <label for="categoriaNombre">Nombre de la categoría:</label>
                 <input type="text" id="categoriaNombre" required>
                 <button type="submit">Guardar Cambios</button>
-                <button type="button" onclick="cancelEditCategoria()">Cancelar</button>
+                <button id="logoutButton">Cerrar sesión</button>
             </form>
         </div>
 
@@ -222,19 +222,52 @@
                     .catch(error => console.error('Error al eliminar producto:', error));
             }
         }
+        function checkAuth() {
+        fetch('/isAuthenticated', {
+            method: 'GET',
+            credentials: 'include' // This is important for including cookies
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('No autenticado');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.authenticated) {
+                window.location.href = '/';
+            }
+        })
+        .catch(() => {
+            window.location.href = '/';
+        });
+    }
 
-    
-        // Función para cerrar sesión
-        function cerrarSesion() {
-            fetch('/logout', { method: 'POST' })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.href = '/';
-                }
-            })
-            .catch(error => console.error('Error al cerrar sesión:', error));
+    // Check authentication on page load
+    checkAuth();
+
+    // Prevent caching of this page
+    window.onpageshow = function(event) {
+        if (event.persisted) {
+            checkAuth();
         }
+    };
+
+    document.getElementById('logoutButton').addEventListener('click', () => {
+        fetch('/logout', { 
+            method: 'POST',
+            credentials: 'include' // This is important for including cookies
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = '/';
+            } else {
+                console.error('Logout failed:', data.message);
+            }
+        })
+        .catch(error => console.error('Error al cerrar sesión:', error));
+    });
     </script>
 </body>
 </html>
