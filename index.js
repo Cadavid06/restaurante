@@ -1023,3 +1023,7 @@ app.get('/consulta-productos-mas-vendidos', (req, res) => {
         res.json(formattedResults);
     });
 });
+
+app.use((req, res, next) => {
+    res.status(404).send("Lo siento, no se pudo encontrar esa ruta!");
+  });
