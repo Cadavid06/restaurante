@@ -55,12 +55,12 @@ function authenticateToken(req, res, next) {
     const token = req.cookies.token;
 
     if (!token) {
-        return res.redirect('/'); // Redirige al login si no hay token
+        return res.status(401).json({ authenticated: false, message: 'No token provided' });
     }
 
     jwt.verify(token, process.env.JWT_SECRET || 'tu_secreto_jwt', (err, user) => {
         if (err) {
-            return res.redirect('/'); // Redirige al login si el token es inválido
+            return res.status(403).json({ authenticated: false, message: 'Invalid token' });
         }
         req.user = user;
         next();
@@ -78,22 +78,9 @@ app.get('/crearUsers.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'crearUsers.html'));
 });
 
-// Ruta para verificar si el usuario está autenticado
-app.get('/isAuthenticated', (req, res) => {
-    const token = req.cookies.token;
-    if (!token) {
-        return res.json({ authenticated: false });
-    }
-
-    jwt.verify(token, process.env.JWT_SECRET || 'tu_secreto_jwt', (err, user) => {
-        if (err) {
-            return res.json({ authenticated: false });
-        }
-        res.json({ authenticated: true });
-    });
-}); 
-
-
+app.get('/isAuthenticated', authenticateToken, (req, res) => {
+    res.json({ authenticated: true, user: req.user });
+});
 
 // Rutas protegidas
 const protectedPages = [
@@ -106,8 +93,7 @@ const protectedPages = [
 ];
 
 protectedPages.forEach(page => {
-    app.get(`/${page}`, authenticateToken, (req, res) => {
-        res.set('Cache-Control', 'no-store'); // Desactiva el caché
+    app.get(`/${page}`, (req, res) => {
         res.sendFile(path.join(__dirname, page));
     });
 });
@@ -199,9 +185,12 @@ app.post('/login', (req, res) => {
 
 // Ruta para cerrar sesión
 app.post('/logout', (req, res) => {
-    // Borra la cookie del token
-    res.clearCookie('token'); 
-    res.redirect('/'); // Redirige al login
+    res.clearCookie('token', { 
+        httpOnly: true, 
+        secure: process.env.NODE_ENV === 'production', 
+        sameSite: 'strict'
+    });
+    res.json({ success: true, message: 'Logged out successfully' });
 });
 
 
