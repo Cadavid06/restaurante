@@ -78,6 +78,10 @@ app.get('/crearUsers.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'crearUsers.html'));
 });
 
+app.get('/crearUsers.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'menu.html'));
+});
+
 app.get('/isAuthenticated', authenticateToken, (req, res) => {
     res.json({ authenticated: true, user: req.user });
 });
