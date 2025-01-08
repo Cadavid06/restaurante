@@ -78,7 +78,7 @@ app.get('/crearUsers.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'crearUsers.html'));
 });
 
-app.get('/crearUsers.html', (req, res) => {
+app.get('/menu.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'menu.html'));
 });
 
