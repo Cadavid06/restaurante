@@ -69,37 +69,12 @@ function authenticateToken(req, res, next) {
 
 
 
-// Rutas públicas
+// Servir todos los archivos estáticos desde el directorio raíz
+app.use(express.static(path.join(__dirname)));
+
+// Ruta principal
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/crearUsers.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'crearUsers.html'));
-});
-
-app.get('/menu.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'menu.html'));
-});
-
-app.get('/gestion_usuarios.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'gestion_usuarios.html'));
-});
-
-app.get('/gestion_pedidos.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'gestion_pedidos.html'));
-});
-
-app.get('/gestion_admin.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'gestion_admin.html'));
-});
-
-app.get('/consultas.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'consultas.html'));
-});
-
-app.get('/agg_products.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'agg_products.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.get('/isAuthenticated', authenticateToken, (req, res) => {
