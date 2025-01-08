@@ -199,7 +199,7 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
 });
 
-// Ruta para agregar una categoría
+// Ruta para agregar una categoría  s
 app.post('/categoria', (req, res) => {
   const { nombre_cat } = req.body; // Cambia nombre_categoria a nombre_cat
   const query = 'INSERT INTO categoria (nombre_categoria) VALUES (?)';
