@@ -82,6 +82,26 @@ app.get('/menu.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'menu.html'));
 });
 
+app.get('/gestion_usuarios.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'gestion_usuarios.html'));
+});
+
+app.get('/gestion_pedidos.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'gestion_pedidos.html'));
+});
+
+app.get('/gestion_admin.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'gestion_admin.html'));
+});
+
+app.get('/consultas.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'consultas.html'));
+});
+
+app.get('/agg_products.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'agg_products.html'));
+});
+
 app.get('/isAuthenticated', authenticateToken, (req, res) => {
     res.json({ authenticated: true, user: req.user });
 });
