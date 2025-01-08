@@ -277,7 +277,7 @@ app.get('/productos', (req, res) => {
     });
 });
 
-// Ruta para guardar pedido y detallePedido
+// Ruta para guardar pedido y detallepedido
 app.post('/pedido', (req, res) => {
     const { idEmpleado, productos } = req.body;
     const fechaPedido = new Date();
@@ -301,27 +301,27 @@ app.post('/pedido', (req, res) => {
         const idPedido = result.insertId;
         console.log("Pedido insertado con ID:", idPedido);
 
-        // Inserta cada producto en la tabla Detallepedido
+        // Inserta cada producto en la tabla detallepedido
         const detalleQueries = productosValidos.map(producto => {
             return new Promise((resolve, reject) => {
                 const detalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES (?, ?, ?)';
                 connection.query(detalleQuery, [idPedido, producto.idProducto, producto.cantidad], (err) => {
                     if (err) {
-                        console.error("Error al insertar en Detallepedido:", err);
+                        console.error("Error al insertar en detallepedido:", err);
                         reject(err);
                     } else {
-                        console.log("Producto insertado en Detallepedido:", producto);
+                        console.log("Producto insertado en detallepedido:", producto);
                         resolve();
                     }
                 });
             });
         });
 
-        // Ejecuta todas las inserciones de DetallePedido
+        // Ejecuta todas las inserciones de detallepedido
         Promise.all(detalleQueries)
             .then(() => res.status(201).json({ success: true, idPedido }))
             .catch(err => {
-                console.error("Error en Promesas de Detallepedido:", err);
+                console.error("Error en Promesas de detallepedido:", err);
                 res.status(500).json({ success: false, error: err.message });
             });
     });
@@ -546,7 +546,7 @@ app.get('/pedido/:id', (req, res) => {
     const query = `
         SELECT p.*, dp.idProducto, dp.cantidad, pr.descripcion
         FROM pedido p
-        JOIN detallePedido dp ON p.idPedido = dp.idPedido
+        JOIN detallepedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE p.idPedido = ?
     `;
@@ -597,22 +597,22 @@ app.put('/pedido/:id', (req, res) => {
             }
 
             // Luego eliminamos los detalles antiguos
-            const deleteDetallesQuery = 'DELETE FROM detallePedido WHERE idPedido = ?';
+            const deleteDetallesQuery = 'DELETE FROM detallepedido WHERE idPedido = ?';
             connection.query(deleteDetallesQuery, [idPedido], (error) => {
                 if (error) {
                     return connection.rollback(() => {
-                        console.error('Error deleting detallePedido:', error);
+                        console.error('Error deleting detallepedido:', error);
                         res.status(500).json({ error: 'Error al actualizar el pedido' });
                     });
                 }
 
                 // Insertamos los nuevos detalles
-                const insertDetalleQuery = 'INSERT INTO detallePedido (idPedido, idProducto, cantidad) VALUES ?';
+                const insertDetalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES ?';
                 const detalles = productos.map(p => [idPedido, p.idProducto, p.cantidad]);
                 connection.query(insertDetalleQuery, [detalles], (error) => {
                     if (error) {
                         return connection.rollback(() => {
-                            console.error('Error inserting new detallePedido:', error);
+                            console.error('Error inserting new detallepedido:', error);
                             res.status(500).json({ error: 'Error al actualizar el pedido' });
                         });
                     }
@@ -620,7 +620,7 @@ app.put('/pedido/:id', (req, res) => {
                     // Calculamos el nuevo total
                     const calcularTotalQuery = `
                         SELECT SUM(dp.cantidad * p.precio) as total
-                        FROM detallePedido dp
+                        FROM detallepedido dp
                         JOIN producto p ON dp.idProducto = p.idProducto
                         WHERE dp.idPedido = ?
                     `;
@@ -679,11 +679,11 @@ app.delete('/pedido/:id', (req, res) => {
             return;
         }
 
-        const deleteDetallesQuery = 'DELETE FROM detallePedido WHERE idPedido = ?';
+        const deleteDetallesQuery = 'DELETE FROM detallepedido WHERE idPedido = ?';
         connection.query(deleteDetallesQuery, [idPedido], (error) => {
             if (error) {
                 return connection.rollback(() => {
-                    console.error('Error deleting detallePedido:', error);
+                    console.error('Error deleting detallepedido:', error);
                     res.status(500).json({ error: 'Error al eliminar el pedido' });
                 });
             }
@@ -719,7 +719,7 @@ app.post('/generar-factura/:idPedido', (req, res) => {
     const queryPedido = `
         SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
         FROM pedido p
-        JOIN detallePedido dp ON p.idPedido = dp.idPedido
+        JOIN detallepedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE p.idPedido = ?
     `;
