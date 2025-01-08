@@ -301,16 +301,16 @@ app.post('/pedido', (req, res) => {
         const idPedido = result.insertId;
         console.log("Pedido insertado con ID:", idPedido);
 
-        // Inserta cada producto en la tabla DetallePedido
+        // Inserta cada producto en la tabla Detallepedido
         const detalleQueries = productosValidos.map(producto => {
             return new Promise((resolve, reject) => {
-                const detalleQuery = 'INSERT INTO detallePedido (idPedido, idProducto, cantidad) VALUES (?, ?, ?)';
+                const detalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES (?, ?, ?)';
                 connection.query(detalleQuery, [idPedido, producto.idProducto, producto.cantidad], (err) => {
                     if (err) {
-                        console.error("Error al insertar en DetallePedido:", err);
+                        console.error("Error al insertar en Detallepedido:", err);
                         reject(err);
                     } else {
-                        console.log("Producto insertado en DetallePedido:", producto);
+                        console.log("Producto insertado en Detallepedido:", producto);
                         resolve();
                     }
                 });
@@ -321,7 +321,7 @@ app.post('/pedido', (req, res) => {
         Promise.all(detalleQueries)
             .then(() => res.status(201).json({ success: true, idPedido }))
             .catch(err => {
-                console.error("Error en Promesas de DetallePedido:", err);
+                console.error("Error en Promesas de Detallepedido:", err);
                 res.status(500).json({ success: false, error: err.message });
             });
     });
