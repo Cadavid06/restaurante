@@ -716,35 +716,47 @@ app.post('/generar-factura/:idPedido', (req, res) => {
     const idPedido = req.params.idPedido;
     const { metodoPago } = req.body;
 
-    const queryPedido = `
-        SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
-        FROM pedido p
-        JOIN detallepedido dp ON p.idPedido = dp.idPedido
-        JOIN producto pr ON dp.idProducto = pr.idProducto
-        WHERE p.idPedido = ?
-    `;
-
-    connection.query(queryPedido, [idPedido], (error, results) => {
-        if (error) {
-            console.error('Error fetching pedido details:', error);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
-        if (results.length === 0) {
-            res.status(404).json({ message: 'Pedido no encontrado' });
-            return;
+    // Primero, verificar si ya existe una factura para este pedido
+    const checkFacturaQuery = 'SELECT idFactura FROM factura WHERE idPedido = ?';
+    connection.query(checkFacturaQuery, [idPedido], (checkError, checkResults) => {
+        if (checkError) {
+            console.error('Error checking existing factura:', checkError);
+            return res.status(500).json({ error: 'Error interno del servidor' });
         }
 
-        const totalPago = results.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
+        if (checkResults.length > 0) {
+            // Ya existe una factura para este pedido
+            return res.status(400).json({ error: 'Ya existe una factura para este pedido', idFactura: checkResults[0].idFactura });
+        }
 
-        const insertFacturaQuery = 'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago) VALUES (?, NOW(), ?, ?)';
-        connection.query(insertFacturaQuery, [idPedido, metodoPago, totalPago], (error, result) => {
+        // Si no existe factura, procedemos a crearla
+        const queryPedido = `
+            SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
+            FROM pedido p
+            JOIN detallepedido dp ON p.idPedido = dp.idPedido
+            JOIN producto pr ON dp.idProducto = pr.idProducto
+            WHERE p.idPedido = ?
+        `;
+
+        connection.query(queryPedido, [idPedido], (error, results) => {
             if (error) {
-                console.error('Error generating factura:', error);
-                res.status(500).json({ error: 'Error al generar la factura' });
-                return;
+                console.error('Error fetching pedido details:', error);
+                return res.status(500).json({ error: 'Error interno del servidor' });
             }
-            res.json({ message: 'Factura generada con éxito', idFactura: result.insertId, totalPago });
+            if (results.length === 0) {
+                return res.status(404).json({ error: 'Pedido no encontrado' });
+            }
+
+            const totalPago = results.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
+
+            const insertFacturaQuery = 'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago) VALUES (?, NOW(), ?, ?)';
+            connection.query(insertFacturaQuery, [idPedido, metodoPago, totalPago], (insertError, result) => {
+                if (insertError) {
+                    console.error('Error generating factura:', insertError);
+                    return res.status(500).json({ error: 'Error al generar la factura' });
+                }
+                res.json({ message: 'Factura generada con éxito', idFactura: result.insertId, totalPago });
+            });
         });
     });
 });

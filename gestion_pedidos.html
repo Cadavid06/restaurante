@@ -235,8 +235,16 @@
             })
             .then(response => response.json())
             .then(data => {
-                console.log('Factura generada:', data);
-                alert('Factura generada con éxito');
+                if (data.error) {
+                    if (data.error.includes('Ya existe una factura')) {
+                        alert(`Ya existe una factura para este pedido. ID de la factura: ${data.idFactura}`);
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                } else {
+                    console.log('Factura generada:', data);
+                    alert(`Factura generada con éxito. ID de la factura: ${data.idFactura}`);
+                }
             })
             .catch((error) => {
                 console.error('Error:', error);
