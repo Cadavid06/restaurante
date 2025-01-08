@@ -79,7 +79,7 @@ app.get('/', (req, res) => {
 
 app.get('/isAuthenticated', authenticateToken, (req, res) => {
     res.json({ authenticated: true, user: req.user });
-});
+});  
 
 // Rutas protegidas
 const protectedPages = [
