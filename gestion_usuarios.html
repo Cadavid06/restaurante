@@ -65,29 +65,29 @@
             const editUserForm = document.getElementById('editUserForm');
             const cancelEditBtn = document.getElementById('cancelEdit');
     
-            function loadUsers() {
-                fetch('/usuarios')
-                    .then(response => response.json())
-                    .then(users => {
-                        userTable.innerHTML = '';
-                        users.forEach(user => {
-                            const row = userTable.insertRow();
-                            row.innerHTML = `
-                                <td>${user.id}</td>
-                                <td>${user.nombre}</td>
-                                <td>${user.role}</td>
-                                <td>
-                                    <button onclick="editUser(${user.id})">Editar</button>
-                                    <button onclick="deleteUser(${user.id})">Eliminar</button>
-                                </td>
-                            `;
-                        });
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Error al cargar usuarios');
+        function loadUsers() {
+            fetch('/usuarios')
+                .then(response => response.json())
+                .then(users => {
+                    userTable.innerHTML = '';
+                    users.forEach(user => {
+                        const row = userTable.insertRow();
+                        row.innerHTML = `
+                            <td>${user.id}</td>
+                            <td>${user.nombre}</td>
+                            <td>${user.role}</td>
+                            <td>
+                                <button onclick="editUser(${user.id})">Editar</button>
+                                <button onclick="deleteUser(${user.id}, '${user.role}')">Eliminar</button>
+                            </td>
+                        `;
                     });
-            }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al cargar usuarios');
+                });
+        }
     
             window.editUser = (id) => {
                 fetch(`/usuario/${id}`)
@@ -105,14 +105,15 @@
                     });
             };
     
-            window.deleteUser = async (id) => {
+            window.deleteUser = async (id, role) => {
                 if (confirm('¿Está seguro de que desea eliminar este usuario?')) {
                     try {
                         const response = await fetch(`/usuario/${id}`, { 
                             method: 'DELETE',
                             headers: {
                                 'Content-Type': 'application/json'
-                            }
+                            },
+                            body: JSON.stringify({ role }) // Enviamos el rol
                         });
                         
                         if (!response.ok) {

@@ -370,16 +370,23 @@ app.put('/usuario/:id', async (req, res) => {
 // Ruta para eliminar un usuario
 app.delete('/usuario/:id', async (req, res) => {
     const { id } = req.params;
+    const { role } = req.body;
     
     try {
-        // Primero intentamos eliminar de la tabla empleado
-        const [resultEmpleado] = await promisePool.query('DELETE FROM empleado WHERE idEmpleado = ?', [id]);
+        let result;
         
-        // Luego intentamos eliminar de la tabla administrador
-        const [resultAdmin] = await promisePool.query('DELETE FROM administrador WHERE idAdmin = ?', [id]);
+        if (role === 'empleado') {
+            // Solo eliminamos de la tabla empleado
+            [result] = await promisePool.query('DELETE FROM empleado WHERE idEmpleado = ?', [id]);
+        } else if (role === 'administrador') {
+            // Solo eliminamos de la tabla administrador
+            [result] = await promisePool.query('DELETE FROM administrador WHERE idAdmin = ?', [id]);
+        } else {
+            return res.status(400).json({ error: 'Rol no válido' });
+        }
 
-        // Verificamos si se eliminó algún registro
-        if (resultEmpleado.affectedRows === 0 && resultAdmin.affectedRows === 0) {
+        // Verificamos si se eliminó el registro
+        if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Usuario no encontrado' });
         }
 
