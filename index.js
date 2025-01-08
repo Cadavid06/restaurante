@@ -759,7 +759,7 @@ app.get('/factura/:idPedido', (req, res) => {
                (dp.cantidad * pr.precio) as subtotal
         FROM factura f
         JOIN pedido p ON f.idPedido = p.idPedido
-        JOIN detallePedido dp ON p.idPedido = dp.idPedido
+        JOIN detallepedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE f.idPedido = ?
     `;
@@ -933,7 +933,7 @@ app.get('/generar-factura-pdf/:idFactura', (req, res) => {
         FROM factura f
         JOIN pedido p ON f.idPedido = p.idPedido
         JOIN empleado e ON p.idEmpleado = e.idEmpleado
-        JOIN detallePedido dp ON p.idPedido = dp.idPedido
+        JOIN detallepedido dp ON p.idPedido = dp.idPedido
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE f.idFactura = ?
     `;
@@ -994,7 +994,7 @@ app.get('/consulta-productos-mas-vendidos', (req, res) => {
             SUM(dp.cantidad * p.precio) as montoTotal
         FROM 
             producto p
-            JOIN detallePedido dp ON p.idProducto = dp.idProducto
+            JOIN detallepedido dp ON p.idProducto = dp.idProducto
             JOIN pedido ped ON dp.idPedido = ped.idPedido
             JOIN factura f ON ped.idPedido = f.idPedido
         WHERE 
