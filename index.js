@@ -7,6 +7,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const config = require('./config');
+const PDFDocument = require('pdfkit');
 require('dotenv').config({
     path: process.env.NODE_ENV === 'production' ? '.env' : '.envLocal'
 });
@@ -21,8 +22,8 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname)));
 app.use('/public', express.static(config.publicPath));
 
-// Configuración de la conexión a la base de datos
-const connectionConfig = process.env.NODE_ENV === 'production'
+// Configuración del pool de conexiones a la base de datos
+const poolConfig = process.env.NODE_ENV === 'production'
     ? {
         host: process.env.MYSQLHOST,
         user: process.env.MYSQLUSER,   
@@ -30,25 +31,33 @@ const connectionConfig = process.env.NODE_ENV === 'production'
         database: process.env.MYSQLDATABASE,
         port: process.env.MYSQLPORT,
         ssl: { rejectUnauthorized: false },
-        connectTimeout: 10000
+        connectionLimit: 10
     }
     : {
         host: 'bsnyuud2rfuv84uwirvt-mysql.services.clever-cloud.com',
         user: 'uslnto3osq3bw7kv',
         password: 'tVm9YWljLunFiFivrH2E',
         database: 'bsnyuud2rfuv84uwirvt',
-        port: 3306
+        port: 3306,
+        connectionLimit: 10
     };
 
-const connection = mysql.createConnection(connectionConfig);
+const pool = mysql.createPool(poolConfig);
 
-connection.connect((err) => {
-    if (err) {
-        console.error('Error connecting to database:', err);
-        return;
+// Promisify for Node.js async/await.
+const promisePool = pool.promise();
+
+// Test database connection
+async function testDbConnection() {
+    try {
+        const [rows] = await promisePool.query('SELECT 1');
+        console.log('Database connection successful');
+    } catch (error) {
+        console.error('Error connecting to the database:', error);
     }
-    console.log('Connected to database successfully!');
-});
+}
+
+testDbConnection();
 
 // Middleware de autenticación
 function authenticateToken(req, res, next) {
@@ -66,8 +75,6 @@ function authenticateToken(req, res, next) {
         next();
     });
 }
-
-
 
 // Servir todos los archivos estáticos desde el directorio raíz
 app.use(express.static(path.join(__dirname)));
@@ -107,39 +114,29 @@ app.post('/crearUsuario', async (req, res) => {
         UNION ALL
         SELECT 'empleado' as role FROM empleado WHERE nombre = ?
     `;
-    connection.query(checkUserQuery, [email, email], async (err, results) => {
-        if (err) {
-            console.error('Error al verificar usuario existente:', err);
-            return res.status(500).json({ success: false, message: 'Error en la base de datos' });
-        }
+    try {
+        const [results] = await promisePool.query(checkUserQuery, [email, email]);
         if (results.length > 0) {
             console.log('Usuario ya existe:', email);
             return res.status(400).json({ success: false, message: 'El correo electrónico ya está registrado' });
         }
 
-        try {
-            const hashedPassword = await bcrypt.hash(password, 10);
-            const insertQuery = role === 'administrador'
-                ? 'INSERT INTO administrador (nombre, contraseña) VALUES (?, ?)'
-                : 'INSERT INTO empleado (nombre, contraseña) VALUES (?, ?)';
-            
-            connection.query(insertQuery, [email, hashedPassword], (insertErr) => {
-                if (insertErr) {
-                    console.error('Error al insertar nuevo usuario:', insertErr);
-                    return res.status(500).json({ success: false, message: 'Error al crear el usuario' });
-                }
-                console.log('Usuario creado exitosamente:', email);
-                res.status(201).json({ success: true, message: 'Usuario creado exitosamente' });
-            });
-        } catch (hashError) {
-            console.error('Error al hashear la contraseña:', hashError);
-            res.status(500).json({ success: false, message: 'Error al procesar la contraseña' });
-        }
-    });
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const insertQuery = role === 'administrador'
+            ? 'INSERT INTO administrador (nombre, contraseña) VALUES (?, ?)'
+            : 'INSERT INTO empleado (nombre, contraseña) VALUES (?, ?)';
+        
+        await promisePool.query(insertQuery, [email, hashedPassword]);
+        console.log('Usuario creado exitosamente:', email);
+        res.status(201).json({ success: true, message: 'Usuario creado exitosamente' });
+    } catch (error) {
+        console.error('Error al crear usuario:', error);
+        res.status(500).json({ success: false, message: 'Error al crear el usuario' });
+    }
 });
 
 // Ruta para iniciar sesión
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     const query = `
@@ -147,39 +144,34 @@ app.post('/login', (req, res) => {
         UNION ALL
         SELECT 'empleado' as role, idEmpleado as id, nombre, contraseña FROM empleado WHERE nombre = ?
     `;
-    connection.query(query, [email, email], async (err, results) => {
-        if (err) {
-            console.error('Error en la base de datos durante el login:', err);
-            return res.status(500).json({ success: false, message: 'Error en la base de datos' });
-        }
+    try {
+        const [results] = await promisePool.query(query, [email, email]);
         if (results.length === 0) {
             return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos' });
         }
 
         const user = results[0];
-        try {
-            const validPassword = await bcrypt.compare(password, user.contraseña);
-            if (!validPassword) {
-                return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos' });
-            }
-
-            const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'tu_secreto_jwt', { expiresIn: '1h' });
-
-            res.cookie('token', token, { 
-                httpOnly: true, 
-                secure: process.env.NODE_ENV === 'production', 
-                maxAge: 3600000 // 1 hora
-            });
-
-            res.json({
-                success: true,
-                role: user.role
-            });
-        } catch (compareError) {
-            console.error('Error al comparar contraseñas:', compareError);
-            res.status(500).json({ success: false, message: 'Error al procesar la autenticación' });
+        const validPassword = await bcrypt.compare(password, user.contraseña);
+        if (!validPassword) {
+            return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos' });
         }
-    });
+
+        const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'tu_secreto_jwt', { expiresIn: '1h' });
+
+        res.cookie('token', token, { 
+            httpOnly: true, 
+            secure: process.env.NODE_ENV === 'production', 
+            maxAge: 3600000 // 1 hora
+        });
+
+        res.json({
+            success: true,
+            role: user.role
+        });
+    } catch (error) {
+        console.error('Error en la base de datos durante el login:', error);
+        res.status(500).json({ success: false, message: 'Error en la base de datos' });
+    }
 });
 
 // Ruta para cerrar sesión
@@ -192,65 +184,49 @@ app.post('/logout', (req, res) => {
     res.json({ success: true, message: 'Logged out successfully' });
 });
 
-
-// Servidor
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+// Ruta para agregar una categoría
+app.post('/categoria', async (req, res) => {
+    const { nombre_cat } = req.body;
+    const query = 'INSERT INTO categoria (nombre_categoria) VALUES (?)';
+    try {
+        const [result] = await promisePool.query(query, [nombre_cat]);
+        res.status(201).json({ id: result.insertId, nombre_categoria: nombre_cat });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// Ruta para agregar una categoría  s
-app.post('/categoria', (req, res) => {
-  const { nombre_cat } = req.body; // Cambia nombre_categoria a nombre_cat
-  const query = 'INSERT INTO categoria (nombre_categoria) VALUES (?)';
-  connection.query(query, [nombre_cat], (err, result) => {
-      if (err) return res.status(500).send(err);
-      res.status(201).json({ id: result.insertId, nombre_categoria: nombre_cat });
-  });
+// Ruta para obtener todas las categorías
+app.get('/categorias', async (req, res) => {
+    try {
+        const [results] = await promisePool.query('SELECT * FROM categoria');
+        console.log('Categorías obtenidas:', results);
+        res.status(200).json(results);
+    } catch (err) {
+        console.error('Error al obtener categorías:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
-
-// Ruta para obtener todas las categorías (para llenar el campo <option> en el HTML)
-app.get('/categorias', (req, res) => {
-  connection.query('SELECT * FROM categoria', (err, results) => {
-      if (err) {
-          console.error('Error al obtener categorías:', err);
-          return res.status(500).send(err);
-      }
-      console.log('Categorías obtenidas:', results); // Agregar log
-      res.status(200).json(results);
-  });
-});
-
 
 // Ruta para agregar un producto
-app.post('/producto', (req, res) => {
-    console.log('Datos recibidos para agregar producto:', req.body); 
+app.post('/producto', async (req, res) => {
+    console.log('Datos recibidos para agregar producto:', req.body);
     const { idCategoria, descripcion, precio, idAdmin } = req.body;
 
-    // Verificación de que el precio sea un número válido
     if (isNaN(precio)) {
         console.error('Precio no válido:', precio);
         return res.status(400).send('Precio no válido');
     }
 
-    // Asegúrate de que idAdmin no sea nulo
     if (!idAdmin) {
         return res.status(400).send('idAdmin es requerido');
     }
 
-    // Consulta para insertar el producto en la tabla Producto
     const queryInsertProducto = 'INSERT INTO producto (idCategoria, descripcion, precio, idAdmin) VALUES (?, ?, ?, ?)';
     
-    // Insertar el producto
-    connection.query(queryInsertProducto, [idCategoria, descripcion, precio, idAdmin], (err, result) => {
-        if (err) {
-            console.error('Error al agregar producto:', err);
-            return res.status(500).send(err);
-        }
-
+    try {
+        const [result] = await promisePool.query(queryInsertProducto, [idCategoria, descripcion, precio, idAdmin]);
         const idProducto = result.insertId;
- 
-        // Respuesta exitosa
         res.status(201).json({ 
             message: 'Producto agregado exitosamente',
             idProducto, 
@@ -259,105 +235,104 @@ app.post('/producto', (req, res) => {
             precio, 
             idAdmin 
         });
-    });
+    } catch (err) {
+        console.error('Error al agregar producto:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Ruta para obtener todos los productos con su categoría
-app.get('/productos', (req, res) => {
+app.get('/productos', async (req, res) => {
     const query = `
         SELECT c.nombre_categoria, p.idProducto, p.descripcion, p.precio
         FROM producto p
         JOIN categoria c ON p.idCategoria = c.idCategoria
     `;
-    connection.query(query, (err, results) => {
-        if (err) {
-            return res.status(500).send(err);
-        }
+    try {
+        const [results] = await promisePool.query(query);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Ruta para guardar pedido y detallepedido
-app.post('/pedido', (req, res) => {
+app.post('/pedido', async (req, res) => {
     const { idEmpleado, productos } = req.body;
     const fechaPedido = new Date();
 
     console.log("Iniciando inserción de pedido:", { idEmpleado, productos });
 
-    // Verificar que todos los productos tengan un idProducto válido
     const productosValidos = productos.filter(p => p.idProducto && !isNaN(p.idProducto));
     if (productosValidos.length !== productos.length) {
         return res.status(400).json({ success: false, error: 'Algunos productos no tienen un ID válido' });
     }
 
-    // Inserta el pedido en la tabla Pedido
     const pedidoQuery = 'INSERT INTO pedido (fechaPedido, idEmpleado) VALUES (?, ?)';
-    connection.query(pedidoQuery, [fechaPedido, idEmpleado], (err, result) => {
-        if (err) {
-            console.error("Error al insertar en Pedido:", err);
-            return res.status(500).json({ success: false, error: err.message });
+    
+    try {
+        const connection = await promisePool.getConnection();
+        await connection.beginTransaction();
+
+        try {
+            const [result] = await connection.query(pedidoQuery, [fechaPedido, idEmpleado]);
+            const idPedido = result.insertId;
+            console.log("Pedido insertado con ID:", idPedido);
+
+            const detalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES (?, ?, ?)';
+            for (const producto of productosValidos) {
+                await connection.query(detalleQuery, [idPedido, producto.idProducto, producto.cantidad]);
+                console.log("Producto insertado en detallepedido:", producto);
+            }
+
+            await connection.commit();
+            res.status(201).json({ success: true, idPedido });
+        } catch (err) {
+            await connection.rollback();
+            throw err;
+        } finally {
+            connection.release();
         }
-
-        const idPedido = result.insertId;
-        console.log("Pedido insertado con ID:", idPedido);
-
-        // Inserta cada producto en la tabla detallepedido
-        const detalleQueries = productosValidos.map(producto => {
-            return new Promise((resolve, reject) => {
-                const detalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES (?, ?, ?)';
-                connection.query(detalleQuery, [idPedido, producto.idProducto, producto.cantidad], (err) => {
-                    if (err) {
-                        console.error("Error al insertar en detallepedido:", err);
-                        reject(err);
-                    } else {
-                        console.log("Producto insertado en detallepedido:", producto);
-                        resolve();
-                    }
-                });
-            });
-        });
-
-        // Ejecuta todas las inserciones de detallepedido
-        Promise.all(detalleQueries)
-            .then(() => res.status(201).json({ success: true, idPedido }))
-            .catch(err => {
-                console.error("Error en Promesas de detallepedido:", err);
-                res.status(500).json({ success: false, error: err.message });
-            });
-    });
+    } catch (err) {
+        console.error("Error en la inserción del pedido:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
-
 // Obtener todos los usuarios
-app.get('/usuarios', (req, res) => {
+app.get('/usuarios', async (req, res) => {
     const query = `
         SELECT idEmpleado as id, nombre, 'empleado' as role FROM empleado
         UNION ALL
         SELECT idAdmin as id, nombre, 'administrador' as role FROM administrador
     `;
-    connection.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        const [results] = await promisePool.query(query);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Obtener un usuario específico
-app.get('/usuario/:id', (req, res) => {
+app.get('/usuario/:id', async (req, res) => {
     const { id } = req.params;
     const query = `
         SELECT idEmpleado as id, nombre, 'empleado' as role FROM empleado WHERE idEmpleado = ?
         UNION ALL
         SELECT idAdmin as id, nombre, 'administrador' as role FROM administrador WHERE idAdmin = ?
     `;
-    connection.query(query, [id, id], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        const [results] = await promisePool.query(query, [id, id]);
         if (results.length === 0) return res.status(404).json({ message: 'Usuario no encontrado' });
         res.json(results[0]);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Actualizar un usuario
-app.put('/usuario/:id', (req, res) => {
+app.put('/usuario/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, password, role } = req.body;
     const oldTable = role === 'administrador' ? 'empleado' : 'administrador';
@@ -373,175 +348,168 @@ app.put('/usuario/:id', (req, res) => {
     query += ` WHERE ${idField} = ?`;
     params.push(id);
 
-    connection.query(query, params, (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        const [result] = await promisePool.query(query, params);
         if (result.affectedRows === 0) {
             const moveQuery = `INSERT INTO ${newTable} (nombre, contraseña) 
                                SELECT nombre, contraseña FROM ${oldTable} WHERE ${oldTable === 'empleado' ? 'idEmpleado' : 'idAdmin'} = ?`;
-            connection.query(moveQuery, [id], (err, moveResult) => {
-                if (err) return res.status(500).json({ error: err.message });
-                if (moveResult.affectedRows === 0) {
-                    return res.status(404).json({ message: 'Usuario no encontrado' });
-                }
-                connection.query(`DELETE FROM ${oldTable} WHERE ${oldTable === 'empleado' ? 'idEmpleado' : 'idAdmin'} = ?`, [id], (err) => {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ message: 'Usuario actualizado y movido exitosamente' });
-                });
-            });
+            const [moveResult] = await promisePool.query(moveQuery, [id]);
+            if (moveResult.affectedRows === 0) {
+                return res.status(404).json({ message: 'Usuario no encontrado' });
+            }
+            await promisePool.query(`DELETE FROM ${oldTable} WHERE ${oldTable === 'empleado' ? 'idEmpleado' : 'idAdmin'} = ?`, [id]);
+            res.json({ message: 'Usuario actualizado y movido exitosamente' });
         } else {
             res.json({ message: 'Usuario actualizado exitosamente' });
         }
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Ruta para eliminar un usuario
-app.delete('/usuario/:id', (req, res) => {
+app.delete('/usuario/:id', async (req, res) => {
     const { id } = req.params;
     
-    // Primero intentamos eliminar de la tabla empleado
-    connection.query('DELETE FROM empleado WHERE idEmpleado = ?', [id], (err, resultEmpleado) => {
-        if (err) {
-            console.error("Error al eliminar empleado:", err);
-            return res.status(500).json({ error: 'Error al eliminar usuario' });
+    try {
+        // Primero intentamos eliminar de la tabla empleado
+        const [resultEmpleado] = await promisePool.query('DELETE FROM empleado WHERE idEmpleado = ?', [id]);
+        
+        // Luego intentamos eliminar de la tabla administrador
+        const [resultAdmin] = await promisePool.query('DELETE FROM administrador WHERE idAdmin = ?', [id]);
+
+        // Verificamos si se eliminó algún registro
+        if (resultEmpleado.affectedRows === 0 && resultAdmin.affectedRows === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
         }
 
-        // Luego intentamos eliminar de la tabla administrador
-        connection.query('DELETE FROM administrador WHERE idAdmin = ?', [id], (err, resultAdmin) => {
-            if (err) {
-                console.error("Error al eliminar administrador:", err);
-                return res.status(500).json({ error: 'Error al eliminar usuario' });
-            }
-
-            // Verificamos si se eliminó algún registro
-            if (resultEmpleado.affectedRows === 0 && resultAdmin.affectedRows === 0) {
-                return res.status(404).json({ message: 'Usuario no encontrado' });
-            }
-
-            res.json({ message: 'Usuario eliminado exitosamente' });
-        });
-    });
+        res.json({ message: 'Usuario eliminado exitosamente' });
+    } catch (err) {
+        console.error("Error al eliminar usuario:", err);
+        res.status(500).json({ error: 'Error al eliminar usuario' });
+    }
 });
 
 // Obtener todas las categorías
-app.get('/categorias', (req, res) => {
-    const query = `SELECT idCategoria as id, nombre FROM categoria`;
-    connection.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/categorias', async (req, res) => {
+    try {
+        const [results] = await promisePool.query('SELECT idCategoria as id, nombre_categoria as nombre FROM categoria');
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Obtener una categoría específica
-app.get('/categoria/:id', (req, res) => {
+app.get('/categoria/:id', async (req, res) => {
     const { id } = req.params;
-    const query = `SELECT idCategoria as id, nombre FROM categoria WHERE idCategoria = ?`;
-    connection.query(query, [id], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        const [results] = await promisePool.query('SELECT idCategoria as id, nombre_categoria as nombre FROM categoria WHERE idCategoria = ?', [id]);
         if (results.length === 0) return res.status(404).json({ message: 'Categoría no encontrada' });
         res.json(results[0]);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Actualizar una categoría
-app.put('/categoria/:id', (req, res) => {
+app.put('/categoria/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre_categoria } = req.body;
 
-    const query = 'UPDATE categoria SET nombre_categoria = ? WHERE idCategoria = ?';
-    connection.query(query, [nombre_categoria, id], (err, result) => {
-        if (err) {
-            console.error("Error al actualizar categoría:", err);
-            return res.status(500).json({ error: 'Error al actualizar categoría' });
-        }
+    try {
+        const [result] = await promisePool.query('UPDATE categoria SET nombre_categoria = ? WHERE idCategoria = ?', [nombre_categoria, id]);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Categoría no encontrada' });
         }
         res.json({ message: 'Categoría actualizada exitosamente' });
-    });
+    } catch (err) {
+        console.error("Error al actualizar categoría:", err);
+        res.status(500).json({ error: 'Error al actualizar categoría' });
+    }
 });
- 
 
 // Eliminar una categoría
-app.delete('/categoria/:id', (req, res) => {
+app.delete('/categoria/:id', async (req, res) => {
     const { id } = req.params;
-    const query = `DELETE FROM categoria WHERE idCategoria = ?`;
     
-    connection.query(query, [id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Categoría no encontrada' });
+    try {
+        const [result] = await promisePool.query('DELETE FROM categoria WHERE idCategoria = ?', [id]);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Categoría no encontrada' });
+        }
         res.json({ message: 'Categoría eliminada exitosamente' });
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Obtener todos los productos
-app.get('/productos', (req, res) => {
-    const query = `SELECT idProducto as id, descripcion, precio, idCategoria FROM producto`;
-    connection.query(query, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/productos', async (req, res) => {
+    try {
+        const [results] = await promisePool.query('SELECT idProducto as id, descripcion, precio, idCategoria FROM producto');
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Obtener un producto específico
-app.get('/producto/:id', (req, res) => {
+app.get('/producto/:id', async (req, res) => {
     const { id } = req.params;
-    const query = `SELECT idProducto as id, descripcion, precio, idCategoria FROM producto WHERE idProducto = ?`;
-    connection.query(query, [id], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        const [results] = await promisePool.query('SELECT idProducto as id, descripcion, precio, idCategoria FROM producto WHERE idProducto = ?', [id]);
         if (results.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
         res.json(results[0]);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Ruta para actualizar un producto
-app.put('/producto/:id', (req, res) => {
+app.put('/producto/:id', async (req, res) => {
     const { id } = req.params;
     const { descripcion, precio, idCategoria } = req.body;
-    const query = 'UPDATE producto SET descripcion = ?, precio = ?, idCategoria = ? WHERE idProducto = ?';
-    connection.query(query, [descripcion, precio, idCategoria, id], (err, result) => {
-        if (err) {
-            console.error('Error al actualizar producto:', err);
-            return res.status(500).json({ error: 'Error al actualizar producto' });
-        }
+    try {
+        const [result] = await promisePool.query('UPDATE producto SET descripcion = ?, precio = ?, idCategoria = ? WHERE idProducto = ?', [descripcion, precio, idCategoria, id]);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Producto no encontrado' });
         }
         res.json({ message: 'Producto actualizado exitosamente' });
-    });
+    } catch (err) {
+        console.error('Error al actualizar producto:', err);
+        res.status(500).json({ error: 'Error al actualizar producto' });
+    }
 });
 
 // Ruta para eliminar un producto
-app.delete('/producto/:id', (req, res) => {
+app.delete('/producto/:id', async (req, res) => {
     const { id } = req.params;
-    const query = 'DELETE FROM producto WHERE idProducto = ?';
-    connection.query(query, [id], (err, result) => {
-        if (err) {
-            console.error('Error al eliminar producto:', err);
-            return res.status(500).json({ error: 'Error al eliminar producto' });
-        }
+    try {
+        const [result] = await promisePool.query('DELETE FROM producto WHERE idProducto = ?', [id]);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Producto no encontrado' });
         }
         res.json({ message: 'Producto eliminado exitosamente' });
-    });
+    } catch (err) {
+        console.error('Error al eliminar producto:', err);
+        res.status(500).json({ error: 'Error al eliminar producto' });
+    }
 });
 
-
 // Obtener todos los pedidos
-app.get('/pedidos', (req, res) => {
-    const query = 'SELECT * FROM pedido';
-    connection.query(query, (error, results) => {
-        if (error) {
-            console.error('Error fetching pedidos:', error);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
+app.get('/pedidos', async (req, res) => {
+    try {
+        const [results] = await promisePool.query('SELECT * FROM pedido');
         res.json(results);
-    });
+    } catch (error) {
+        console.error('Error fetching pedidos:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
 // Obtener un pedido específico con sus productos
-app.get('/pedido/:id', (req, res) => {
+app.get('/pedido/:id', async (req, res) => {
     const idPedido = req.params.id;
     const query = `
         SELECT p.*, dp.idProducto, dp.cantidad, pr.descripcion
@@ -550,15 +518,10 @@ app.get('/pedido/:id', (req, res) => {
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE p.idPedido = ?
     `;
-    connection.query(query, [idPedido], (error, results) => {
-        if (error) {
-            console.error('Error fetching pedido:', error);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
+    try {
+        const [results] = await promisePool.query(query, [idPedido]);
         if (results.length === 0) {
-            res.status(404).json({ message: 'Pedido no encontrado' });
-            return;
+            return res.status(404).json({ message: 'Pedido no encontrado' });
         }
         const pedido = {
             idPedido: results[0].idPedido,
@@ -571,198 +534,124 @@ app.get('/pedido/:id', (req, res) => {
             }))
         };
         res.json(pedido);
-    });
+    } catch (error) {
+        console.error('Error fetching pedido:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
 // Actualizar un pedido
-app.put('/pedido/:id', (req, res) => {
+app.put('/pedido/:id', async (req, res) => {
     const idPedido = req.params.id;
     const { fechaPedido, idEmpleado, productos } = req.body;
 
-    connection.beginTransaction(err => {
-        if (err) {
-            console.error('Error starting transaction:', err);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
+    const connection = await promisePool.getConnection();
+    try {
+        await connection.beginTransaction();
 
         // Primero actualizamos el pedido básico
-        const updatePedidoQuery = 'UPDATE pedido SET fechaPedido = ?, idEmpleado = ? WHERE idPedido = ?';
-        connection.query(updatePedidoQuery, [fechaPedido, idEmpleado, idPedido], (error) => {
-            if (error) {
-                return connection.rollback(() => {
-                    console.error('Error updating pedido:', error);
-                    res.status(500).json({ error: 'Error al actualizar el pedido' });
-                });
-            }
+        await connection.query('UPDATE pedido SET fechaPedido = ?, idEmpleado = ? WHERE idPedido = ?', [fechaPedido, idEmpleado, idPedido]);
 
-            // Luego eliminamos los detalles antiguos
-            const deleteDetallesQuery = 'DELETE FROM detallepedido WHERE idPedido = ?';
-            connection.query(deleteDetallesQuery, [idPedido], (error) => {
-                if (error) {
-                    return connection.rollback(() => {
-                        console.error('Error deleting detallepedido:', error);
-                        res.status(500).json({ error: 'Error al actualizar el pedido' });
-                    });
-                }
+        // Luego eliminamos los detalles antiguos
+        await connection.query('DELETE FROM detallepedido WHERE idPedido = ?', [idPedido]);
 
-                // Insertamos los nuevos detalles
-                const insertDetalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES ?';
-                const detalles = productos.map(p => [idPedido, p.idProducto, p.cantidad]);
-                connection.query(insertDetalleQuery, [detalles], (error) => {
-                    if (error) {
-                        return connection.rollback(() => {
-                            console.error('Error inserting new detallepedido:', error);
-                            res.status(500).json({ error: 'Error al actualizar el pedido' });
-                        });
-                    }
+        // Insertamos los nuevos detalles
+        const insertDetalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES ?';
+        const detalles = productos.map(p => [idPedido, p.idProducto, p.cantidad]);
+        await connection.query(insertDetalleQuery, [detalles]);
 
-                    // Calculamos el nuevo total
-                    const calcularTotalQuery = `
-                        SELECT SUM(dp.cantidad * p.precio) as total
-                        FROM detallepedido dp
-                        JOIN producto p ON dp.idProducto = p.idProducto
-                        WHERE dp.idPedido = ?
-                    `;
-                    connection.query(calcularTotalQuery, [idPedido], (error, results) => {
-                        if (error) {
-                            return connection.rollback(() => {
-                                console.error('Error calculating total:', error);
-                                res.status(500).json({ error: 'Error al calcular el total' });
-                            });
-                        }
+        // Calculamos el nuevo total
+        const [totalResults] = await connection.query(`
+            SELECT SUM(dp.cantidad * p.precio) as total
+            FROM detallepedido dp
+            JOIN producto p ON dp.idProducto = p.idProducto
+            WHERE dp.idPedido = ?
+        `, [idPedido]);
 
-                        const nuevoTotal = results[0].total;
+        const nuevoTotal = totalResults[0].total;
 
-                        // Actualizamos la factura con el nuevo total si existe
-                        const updateFacturaQuery = `
-                            UPDATE factura 
-                            SET totalPago = ?
-                            WHERE idPedido = ?
-                        `;
-                        connection.query(updateFacturaQuery, [nuevoTotal, idPedido], (error) => {
-                            if (error) {
-                                return connection.rollback(() => {
-                                    console.error('Error updating factura:', error);
-                                    res.status(500).json({ error: 'Error al actualizar la factura' });
-                                });
-                            }
+        // Actualizamos la factura con el nuevo total si existe
+        await connection.query('UPDATE factura SET totalPago = ? WHERE idPedido = ?', [nuevoTotal, idPedido]);
 
-                            connection.commit(err => {
-                                if (err) {
-                                    return connection.rollback(() => {
-                                        console.error('Error committing transaction:', err);
-                                        res.status(500).json({ error: 'Error al actualizar el pedido' });
-                                    });
-                                }
-                                res.json({ 
-                                    message: 'Pedido actualizado con éxito',
-                                    nuevoTotal: nuevoTotal
-                                });
-                            });
-                        });
-                    });
-                });
-            });
+        await connection.commit();
+        res.json({ 
+            message: 'Pedido actualizado con éxito',
+            nuevoTotal: nuevoTotal
         });
-    });
+    } catch (error) {
+        await connection.rollback();
+        console.error('Error updating pedido:', error);
+        res.status(500).json({ error: 'Error al actualizar el pedido' });
+    } finally {
+        connection.release();
+    }
 });
 
 // Eliminar un pedido
-app.delete('/pedido/:id', (req, res) => {
+app.delete('/pedido/:id', async (req, res) => {
     const idPedido = req.params.id;
 
-    connection.beginTransaction(err => {
-        if (err) {
-            console.error('Error starting transaction:', err);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
+    const connection = await promisePool.getConnection();
+    try {
+        await connection.beginTransaction();
 
-        const deleteDetallesQuery = 'DELETE FROM detallepedido WHERE idPedido = ?';
-        connection.query(deleteDetallesQuery, [idPedido], (error) => {
-            if (error) {
-                return connection.rollback(() => {
-                    console.error('Error deleting detallepedido:', error);
-                    res.status(500).json({ error: 'Error al eliminar el pedido' });
-                });
-            }
+        await connection.query('DELETE FROM detallepedido WHERE idPedido = ?', [idPedido]);
+        await connection.query('DELETE FROM pedido WHERE idPedido = ?', [idPedido]);
 
-            const deletePedidoQuery = 'DELETE FROM pedido WHERE idPedido = ?';
-            connection.query(deletePedidoQuery, [idPedido], (error) => {
-                if (error) {
-                    return connection.rollback(() => {
-                        console.error('Error deleting pedido:', error);
-                        res.status(500).json({ error: 'Error al eliminar el pedido' });
-                    });
-                }
-
-                connection.commit(err => {
-                    if (err) {
-                        return connection.rollback(() => {
-                            console.error('Error committing transaction:', err);
-                            res.status(500).json({ error: 'Error al eliminar el pedido' });
-                        });
-                    }
-                    res.json({ message: 'Pedido eliminado con éxito' });
-                });
-            });
-        });
-    });
+        await connection.commit();
+        res.json({ message: 'Pedido eliminado con éxito' });
+    } catch (error) {
+        await connection.rollback();
+        console.error('Error deleting pedido:', error);
+        res.status(500).json({ error: 'Error al eliminar el pedido' });
+    } finally {
+        connection.release();
+    }
 });
 
 // Generar factura
-app.post('/generar-factura/:idPedido', (req, res) => {
+app.post('/generar-factura/:idPedido', async (req, res) => {
     const idPedido = req.params.idPedido;
     const { metodoPago } = req.body;
 
-    // Primero, verificar si ya existe una factura para este pedido
-    const checkFacturaQuery = 'SELECT idFactura FROM factura WHERE idPedido = ?';
-    connection.query(checkFacturaQuery, [idPedido], (checkError, checkResults) => {
-        if (checkError) {
-            console.error('Error checking existing factura:', checkError);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
-
+    try {
+        // Primero, verificar si ya existe una factura para este pedido
+        const [checkResults] = await promisePool.query('SELECT idFactura FROM factura WHERE idPedido = ?', [idPedido]);
+        
         if (checkResults.length > 0) {
             // Ya existe una factura para este pedido
             return res.status(400).json({ error: 'Ya existe una factura para este pedido', idFactura: checkResults[0].idFactura });
         }
 
         // Si no existe factura, procedemos a crearla
-        const queryPedido = `
+        const [pedidoResults] = await promisePool.query(`
             SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
             FROM pedido p
             JOIN detallepedido dp ON p.idPedido = dp.idPedido
             JOIN producto pr ON dp.idProducto = pr.idProducto
             WHERE p.idPedido = ?
-        `;
+        `, [idPedido]);
 
-        connection.query(queryPedido, [idPedido], (error, results) => {
-            if (error) {
-                console.error('Error fetching pedido details:', error);
-                return res.status(500).json({ error: 'Error interno del servidor' });
-            }
-            if (results.length === 0) {
-                return res.status(404).json({ error: 'Pedido no encontrado' });
-            }
+        if (pedidoResults.length === 0) {
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        }
 
-            const totalPago = results.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
+        const totalPago = pedidoResults.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
 
-            const insertFacturaQuery = 'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago) VALUES (?, NOW(), ?, ?)';
-            connection.query(insertFacturaQuery, [idPedido, metodoPago, totalPago], (insertError, result) => {
-                if (insertError) {
-                    console.error('Error generating factura:', insertError);
-                    return res.status(500).json({ error: 'Error al generar la factura' });
-                }
-                res.json({ message: 'Factura generada con éxito', idFactura: result.insertId, totalPago });
-            });
-        });
-    });
+        const [insertResult] = await promisePool.query(
+            'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago) VALUES (?, NOW(), ?, ?)',
+            [idPedido, metodoPago, totalPago]
+        );
+
+        res.json({ message: 'Factura generada con éxito', idFactura: insertResult.insertId, totalPago });
+    } catch (error) {
+        console.error('Error generating factura:', error);
+        res.status(500).json({ error: 'Error al generar la factura' });
+    }
 });
 
 // Ruta para obtener la información de la factura
-app.get('/factura/:idPedido', (req, res) => {
+app.get('/factura/:idPedido', async (req, res) => {
     const idPedido = req.params.idPedido;
     const query = `
         SELECT f.*, p.fechaPedido, p.idEmpleado,
@@ -776,16 +665,11 @@ app.get('/factura/:idPedido', (req, res) => {
         WHERE f.idPedido = ?
     `;
 
-    connection.query(query, [idPedido], (error, results) => {
-        if (error) {
-            console.error('Error fetching factura:', error);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
+    try {
+        const [results] = await promisePool.query(query, [idPedido]);
 
         if (results.length === 0) {
-            res.status(404).json({ message: 'Factura no encontrada' });
-            return;
+            return res.status(404).json({ message: 'Factura no encontrada' });
         }
 
         // Calcular el total real basado en los productos actuales
@@ -811,33 +695,18 @@ app.get('/factura/:idPedido', (req, res) => {
 
         // Actualizar el total en la base de datos si es diferente
         if (total !== results[0].totalPago) {
-            const updateTotalQuery = 'UPDATE factura SET totalPago = ? WHERE idPedido = ?';
-            connection.query(updateTotalQuery, [total, idPedido], (error) => {
-                if (error) {
-                    console.error('Error updating factura total:', error);
-                }
-            });
+            await promisePool.query('UPDATE factura SET totalPago = ? WHERE idPedido = ?', [total, idPedido]);
         }
 
         res.json(factura);
-    });
-});
-
-// Otra ruta para obtener todos los productos
-app.get('/productos', (req, res) => {
-    const query = 'SELECT * FROM producto';
-    connection.query(query, (error, results) => {
-        if (error) {
-            console.error('Error fetching productos:', error);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
-        res.json(results);
-    });
+    } catch (error) {
+        console.error('Error fetching factura:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
 // Consultas
-app.get('/consulta-facturas', (req, res) => {
+app.get('/consulta-facturas', async (req, res) => {
     const { fechaInicio, fechaFin, tipo } = req.query;
 
     if (!fechaInicio || !fechaFin || !tipo) {
@@ -877,11 +746,8 @@ app.get('/consulta-facturas', (req, res) => {
             MIN(f.fechaFactura)
     `;
 
-    connection.query(query, [fechaInicio, fechaFin], (error, detalles) => {
-        if (error) {
-            console.error('Error en la consulta de facturas:', error);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
+    try {
+        const [detalles] = await promisePool.query(query, [fechaInicio, fechaFin]);
 
         // Calcular totales
         const totalFacturas = detalles.reduce((sum, row) => sum + row.cantidad, 0);
@@ -896,10 +762,13 @@ app.get('/consulta-facturas', (req, res) => {
                 monto: parseFloat(row.monto)
             }))
         });
-    });
+    } catch (error) {
+        console.error('Error en la consulta de facturas:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
-app.get('/consulta-empleados-facturaron', (req, res) => {
+app.get('/consulta-empleados-facturaron', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query;
 
     if (!fechaInicio || !fechaFin) {
@@ -920,11 +789,8 @@ app.get('/consulta-empleados-facturaron', (req, res) => {
         ORDER BY montoTotal DESC
     `;
 
-    connection.query(query, [fechaInicio, fechaFin], (error, results) => {
-        if (error) {
-            console.error('Error en la consulta de empleados:', error);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
+    try {
+        const [results] = await promisePool.query(query, [fechaInicio, fechaFin]);
 
         // Ensure numeric values
         const formattedResults = results.map(row => ({
@@ -934,11 +800,14 @@ app.get('/consulta-empleados-facturaron', (req, res) => {
         }));
 
         res.json(formattedResults);
-    });
+    } catch (error) {
+        console.error('Error en la consulta de empleados:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
 //PDF facturas
-app.get('/generar-factura-pdf/:idFactura', (req, res) => {
+app.get('/generar-factura-pdf/:idFactura', async (req, res) => {
     const idFactura = req.params.idFactura;
     const query = `
         SELECT f.*, p.fechaPedido, e.nombre as nombreEmpleado, pr.descripcion, dp.cantidad, pr.precio
@@ -950,16 +819,11 @@ app.get('/generar-factura-pdf/:idFactura', (req, res) => {
         WHERE f.idFactura = ?
     `;
 
-    connection.query(query, [idFactura], (error, results) => {
-        if (error) {
-            console.error('Error al generar factura PDF:', error);
-            res.status(500).json({ error: 'Error interno del servidor' });
-            return;
-        }
+    try {
+        const [results] = await promisePool.query(query, [idFactura]);
 
         if (results.length === 0) {
-            res.status(404).json({ error: 'Factura no encontrada' });
-            return;
+            return res.status(404).json({ error: 'Factura no encontrada' });
         }
 
         const factura = results[0];
@@ -988,10 +852,13 @@ app.get('/generar-factura-pdf/:idFactura', (req, res) => {
         doc.fontSize(16).text(`Total: $${factura.totalPago}`, { align: 'right' });
 
         doc.end();
-    });
+    } catch (error) {
+        console.error('Error al generar factura PDF:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
-app.get('/consulta-productos-mas-vendidos', (req, res) => {
+app.get('/consulta-productos-mas-vendidos', async (req, res) => {
     const { fechaInicio, fechaFin, limite } = req.query;
 
     if (!fechaInicio || !fechaFin || !limite) {
@@ -1018,11 +885,8 @@ app.get('/consulta-productos-mas-vendidos', (req, res) => {
         LIMIT ?
     `;
 
-    connection.query(query, [fechaInicio, fechaFin, parseInt(limite)], (error, results) => {
-        if (error) {
-            console.error('Error en la consulta de productos más vendidos:', error);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
+    try {
+        const [results] = await promisePool.query(query, [fechaInicio, fechaFin, parseInt(limite)]);
 
         // Ensure numeric values
         const formattedResults = results.map(row => ({
@@ -1032,9 +896,18 @@ app.get('/consulta-productos-mas-vendidos', (req, res) => {
         }));
 
         res.json(formattedResults);
-    });
+    } catch (error) {
+        console.error('Error en la consulta de productos más vendidos:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
 app.use((req, res, next) => {
     res.status(404).send("Lo siento, no se pudo encontrar esa ruta!");
-  });
+});
+
+// Servidor
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+});
