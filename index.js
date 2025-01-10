@@ -641,7 +641,7 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
 
         // Si no existe factura, procedemos a crearla
         const [pedidoResults] = await promisePool.query(`
-            SELECT p.idPedido, p.fechaPedido, p.idEmpleado, p.num_mesa, dp.idProducto, dp.cantidad, pr.precio
+            SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
             FROM pedido p
             JOIN detallepedido dp ON p.idPedido = dp.idPedido
             JOIN producto pr ON dp.idProducto = pr.idProducto
@@ -655,8 +655,8 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
         const totalPago = pedidoResults.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
 
         const [insertResult] = await promisePool.query(
-            'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago, num_mesa) VALUES (?, NOW(), ?, ?, ?)',
-            [idPedido, metodoPago, totalPago, pedidoResults[0].num_mesa]
+            'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago) VALUES (?, NOW(), ?, ?)',
+            [idPedido, metodoPago, totalPago]
         );
 
         res.json({ message: 'Factura generada con éxito', idFactura: insertResult.insertId, totalPago });
