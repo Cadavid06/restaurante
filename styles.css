@@ -237,3 +237,17 @@ tr:hover {
         padding: 10px 15px;
     }
 }
+
+.search-container {
+    margin-bottom: 20px;
+}
+#searchInput {
+    width: 100%;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.hidden {
+    display: none;
+}

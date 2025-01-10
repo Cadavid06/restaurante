@@ -266,24 +266,24 @@ app.get('/productos', async (req, res) => {
 
 // Ruta para guardar pedido y detallepedido
 app.post('/pedido', async (req, res) => {
-    const { idEmpleado, productos } = req.body;
+    const { idEmpleado, num_mesa, productos } = req.body;
     const fechaPedido = new Date(); 
 
-    console.log("Iniciando inserción de pedido:", { idEmpleado, productos });
+    console.log("Iniciando inserción de pedido:", { idEmpleado, num_mesa, productos });
 
     const productosValidos = productos.filter(p => p.idProducto && !isNaN(p.idProducto));
     if (productosValidos.length !== productos.length) {
         return res.status(400).json({ success: false, error: 'Algunos productos no tienen un ID válido' });
     }
 
-    const pedidoQuery = 'INSERT INTO pedido (fechaPedido, idEmpleado) VALUES (?, ?)';
+    const pedidoQuery = 'INSERT INTO pedido (fechaPedido, idEmpleado, num_mesa) VALUES (?, ?, ?)';
     
     try {
         const connection = await promisePool.getConnection();
         await connection.beginTransaction();
 
         try {
-            const [result] = await connection.query(pedidoQuery, [fechaPedido, idEmpleado]);
+            const [result] = await connection.query(pedidoQuery, [fechaPedido, idEmpleado, num_mesa]);
             const idPedido = result.insertId;
             console.log("Pedido insertado con ID:", idPedido);
 
@@ -542,6 +542,7 @@ app.get('/pedido/:id', async (req, res) => {
             idPedido: results[0].idPedido,
             fechaPedido: results[0].fechaPedido,
             idEmpleado: results[0].idEmpleado,
+            num_mesa: results[0].num_mesa,
             productos: results.map(row => ({
                 idProducto: row.idProducto,
                 descripcion: row.descripcion,
@@ -558,14 +559,14 @@ app.get('/pedido/:id', async (req, res) => {
 // Actualizar un pedido
 app.put('/pedido/:id', async (req, res) => {
     const idPedido = req.params.id;
-    const { fechaPedido, idEmpleado, productos } = req.body;
+    const { fechaPedido, idEmpleado, num_mesa, productos } = req.body;
 
     const connection = await promisePool.getConnection();
     try {
         await connection.beginTransaction();
 
         // Primero actualizamos el pedido básico
-        await connection.query('UPDATE pedido SET fechaPedido = ?, idEmpleado = ? WHERE idPedido = ?', [fechaPedido, idEmpleado, idPedido]);
+        await connection.query('UPDATE pedido SET fechaPedido = ?, idEmpleado = ?, num_mesa = ? WHERE idPedido = ?', [fechaPedido, idEmpleado, num_mesa, idPedido]);
 
         // Luego eliminamos los detalles antiguos
         await connection.query('DELETE FROM detallepedido WHERE idPedido = ?', [idPedido]);
@@ -640,7 +641,7 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
 
         // Si no existe factura, procedemos a crearla
         const [pedidoResults] = await promisePool.query(`
-            SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
+            SELECT p.idPedido, p.fechaPedido, p.idEmpleado, p.num_mesa, dp.idProducto, dp.cantidad, pr.precio
             FROM pedido p
             JOIN detallepedido dp ON p.idPedido = dp.idPedido
             JOIN producto pr ON dp.idProducto = pr.idProducto
@@ -654,8 +655,8 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
         const totalPago = pedidoResults.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
 
         const [insertResult] = await promisePool.query(
-            'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago) VALUES (?, NOW(), ?, ?)',
-            [idPedido, metodoPago, totalPago]
+            'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago, num_mesa) VALUES (?, NOW(), ?, ?, ?)',
+            [idPedido, metodoPago, totalPago, pedidoResults[0].num_mesa]
         );
 
         res.json({ message: 'Factura generada con éxito', idFactura: insertResult.insertId, totalPago });
@@ -669,7 +670,7 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
 app.get('/factura/:idPedido', async (req, res) => {
     const idPedido = req.params.idPedido;
     const query = `
-        SELECT f.*, p.fechaPedido, p.idEmpleado,
+        SELECT f.*, p.fechaPedido, p.idEmpleado, p.num_mesa,
                dp.idProducto, dp.cantidad,
                pr.descripcion, pr.precio,
                (dp.cantidad * pr.precio) as subtotal
@@ -696,9 +697,10 @@ app.get('/factura/:idPedido', async (req, res) => {
             idPedido: results[0].idPedido,
             fechaFactura: results[0].fechaFactura,
             metodoPago: results[0].metodoPago,
-            totalPago: total, // Usar el total calculado
+            totalPago: total,
             fechaPedido: results[0].fechaPedido,
             idEmpleado: results[0].idEmpleado,
+            num_mesa: results[0].num_mesa,
             productos: results.map(row => ({
                 idProducto: row.idProducto,
                 descripcion: row.descripcion,

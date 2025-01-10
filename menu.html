@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Menú del Restaurante</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="header">
         <h1>Bienvenidos al Menú</h1>
+    </div>
+
+    <div class="search-container">
+        <input type="text" id="searchInput" placeholder="Buscar productos...">
     </div>
 
     <div class="content" id="menuContent">
@@ -19,6 +22,8 @@
     <div class="box">
         <h2>Resumen del Pedido</h2>
         <div id="pedidoResumen"></div>
+        <label htmlFor="num_mesa">Número de Mesa:</label>
+        <input type="number" id="num_mesa" min="1" required />
         <label for="metodoPago">Método de Pago:</label>
         <select id="metodoPago">
             <option value="Efectivo">Efectivo</option>
@@ -45,13 +50,16 @@
             const generarPedidoBtn = document.getElementById('generarPedido');
             const metodoPagoSelect = document.getElementById('metodoPago');
             const facturaTextArea = document.getElementById('facturaTextArea');
+            const searchInput = document.getElementById('searchInput');
 
             let productosSeleccionados = [];
+            let allProducts = [];
 
             // Cargar productos y generar el menú
             try {
                 const response = await fetch('/productos');
                 const productos = await response.json();
+                allProducts = productos;
 
                 const categorias = {};
                 productos.forEach(({ nombre_categoria, descripcion, precio, idProducto }) => {
@@ -63,12 +71,12 @@
 
                 for (const [categoria, items] of Object.entries(categorias)) {
                     const categoriaDiv = document.createElement('div');
-                    categoriaDiv.className = 'box';
+                    categoriaDiv.className = 'box categoria-container';
                     categoriaDiv.innerHTML = `<h2>${categoria}</h2>`;
 
                     items.forEach(({ descripcion, precio, idProducto }) => {
                         const productoDiv = document.createElement('div');
-                        productoDiv.className = 'boxCat';
+                        productoDiv.className = 'boxCat producto-item';
                         productoDiv.innerHTML = `
                             <p>${descripcion} - $${precio}</p>
                             <input type="number" class="cantidad" min="0" value="0" data-id="${idProducto}" data-precio="${precio}" data-nombre="${descripcion}">
@@ -124,53 +132,86 @@
             }
 
             generarPedidoBtn.addEventListener('click', async () => {
-                if (productosSeleccionados.length === 0) {
-                    alert('Por favor, seleccione al menos un producto antes de generar el pedido.');
+            if (productosSeleccionados.length === 0) {
+                alert('Por favor, seleccione al menos un producto antes de generar el pedido.');
+                return;
+            }
+
+            const num_mesa = document.getElementById('num_mesa').value;
+            if (!num_mesa) {
+                alert('Por favor, ingrese el número de mesa.');
+                return;
+            }
+
+            const confirmar = confirm('¿Está seguro de que desea realizar este pedido?');
+            if (!confirmar) return;
+
+            try {
+                const idEmpleado = localStorage.getItem('userId');
+                if (!idEmpleado) {
+                    alert('No se ha encontrado el ID del empleado. Por favor, inicie sesión nuevamente.');
+                    window.location.href = 'index.html';
                     return;
                 }
 
-                const confirmar = confirm('¿Está seguro de que desea realizar este pedido?');
-                if (!confirmar) return;
+                const response = await fetch('/pedido', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        idEmpleado,
+                        num_mesa,
+                        productos: productosSeleccionados.map(p => ({
+                            idProducto: p.idProducto,
+                            cantidad: p.cantidad
+                        })),
+                        metodoPago: metodoPagoSelect.value
+                    }),
+                });
 
-                try {
-                    const idEmpleado = localStorage.getItem('userId');
-                    if (!idEmpleado) {
-                        alert('No se ha encontrado el ID del empleado. Por favor, inicie sesión nuevamente.');
-                        window.location.href = 'index.html';
-                        return;
-                    }
-
-                    const response = await fetch('/pedido', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            idEmpleado,
-                            productos: productosSeleccionados.map(p => ({
-                                idProducto: p.idProducto,
-                                cantidad: p.cantidad
-                            })),
-                            metodoPago: metodoPagoSelect.value
-                        }),
-                    });
-
-                    const data = await response.json();
-                    if (data.success) {
-                        alert(`Pedido guardado con éxito. ID del pedido: ${data.idPedido}`);
-                        // Limpiar el formulario
-                        document.querySelectorAll('.cantidad').forEach(input => input.value = 0);
-                        actualizarResumenPedido();
-                    } else {
-                        alert('Error al guardar el pedido: ' + (data.error || 'Error desconocido'));
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('Error al procesar el pedido');
+                const data = await response.json();
+                if (data.success) {
+                    alert(`Pedido guardado con éxito. ID del pedido: ${data.idPedido}`);
+                    // Limpiar el formulario
+                    document.querySelectorAll('.cantidad').forEach(input => input.value = 0);
+                    document.getElementById('num_mesa').value = '';
+                    actualizarResumenPedido();
+                } else {
+                    alert('Error al guardar el pedido: ' + (data.error || 'Error desconocido'));
                 }
-            });
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al procesar el pedido');
+            }
+        });
 
             metodoPagoSelect.addEventListener('change', () => actualizarVistaFactura(
                 productosSeleccionados.reduce((total, p) => total + p.subtotal, 0)
             ));
+
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                const productoItems = document.querySelectorAll('.producto-item');
+                const categoriaContainers = document.querySelectorAll('.categoria-container');
+
+                productoItems.forEach(item => {
+                    const productName = item.querySelector('p').textContent.toLowerCase();
+                    if (productName.includes(searchTerm)) {
+                        item.classList.remove('hidden');
+                    } else {
+                        item.classList.add('hidden');
+                    }
+                });
+
+                categoriaContainers.forEach(container => {
+                    const visibleProducts = container.querySelectorAll('.producto-item:not(.hidden)');
+                    if (visibleProducts.length === 0) {
+                        container.classList.add('hidden');
+                    } else {
+                        container.classList.remove('hidden');
+                    }
+                });
+            });
+
         });
 
         function checkAuth() {

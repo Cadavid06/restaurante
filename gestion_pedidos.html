@@ -15,6 +15,7 @@
                     <th>ID Pedido</th>
                     <th>Fecha Pedido</th>
                     <th>ID Empleado</th>
+                    <th>Número de Mesa</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -27,10 +28,12 @@
             <h2>Editar Pedido</h2>
             <form id="editPedidoForm">
                 <input type="hidden" id="editPedidoId" />
-                <label for="editFechaPedido">Fecha Pedido:</label>
+                <label htmlFor="editFechaPedido">Fecha Pedido:</label>
                 <input type="date" id="editFechaPedido" required />
                 <label htmlFor="editIdEmpleado">ID Empleado:</label>
                 <input type="number" id="editIdEmpleado" required />
+                <label htmlFor="editNumMesa">Número de Mesa:</label>
+                <input type="number" id="editNumMesa" required />
                 <h3>Productos del Pedido</h3>
                 <div id="editProductosList"></div>
                 <h3>Añadir productos</h3>
@@ -74,6 +77,7 @@
                                 <td>${pedido.idPedido}</td>
                                 <td>${new Date(pedido.fechaPedido).toLocaleDateString()}</td>
                                 <td>${pedido.idEmpleado}</td>
+                                <td>${pedido.num_mesa}</td>
                                 <td>
                                     <button onClick="editPedido(${pedido.idPedido})">Editar</button>
                                     <button onClick="deletePedido(${pedido.idPedido})">Eliminar</button>
@@ -93,6 +97,58 @@
                 .catch(error => console.error('Error:', error));
         }
 
+        function editPedido(idPedido) {
+            fetch(`/pedido/${idPedido}`)
+                .then(response => response.json())
+                .then(pedido => {
+                    document.getElementById('editPedidoId').value = pedido.idPedido;
+                    document.getElementById('editFechaPedido').value = new Date(pedido.fechaPedido).toISOString().split('T')[0];
+                    document.getElementById('editIdEmpleado').value = pedido.idEmpleado;
+                    document.getElementById('editNumMesa').value = pedido.num_mesa;
+                    
+                    const productosList = document.getElementById('editProductosList');
+                    productosList.innerHTML = '';
+                    pedido.productos.forEach(producto => {
+                        productosList.innerHTML += createProductRow(producto);
+                    });
+                    
+                    document.getElementById('editPedidoModal').style.display = 'block';
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        document.getElementById('editPedidoForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const idPedido = document.getElementById('editPedidoId').value;
+            const fechaPedido = document.getElementById('editFechaPedido').value;
+            const idEmpleado = document.getElementById('editIdEmpleado').value;
+            const num_mesa = document.getElementById('editNumMesa').value;
+            
+            const productos = Array.from(document.getElementById('editProductosList').children).map(div => {
+                return {
+                    idProducto: div.dataset.id,
+                    cantidad: parseInt(div.querySelector('input[name="cantidad"]').value)
+                };
+            });
+
+            fetch(`/pedido/${idPedido}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ fechaPedido, idEmpleado, num_mesa, productos }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+                closeEditModal();
+                loadPedidos();
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        });
+
         function loadAllProducts() {
             fetch('/productos')
                 .then(response => response.json())
@@ -108,25 +164,6 @@
                     });
                 })
                 .catch(error => console.error('Error loading products:', error));
-        }
-
-        function editPedido(idPedido) {
-            fetch(`/pedido/${idPedido}`)
-                .then(response => response.json())
-                .then(pedido => {
-                    document.getElementById('editPedidoId').value = pedido.idPedido;
-                    document.getElementById('editFechaPedido').value = new Date(pedido.fechaPedido).toISOString().split('T')[0];
-                    document.getElementById('editIdEmpleado').value = pedido.idEmpleado;
-                    
-                    const productosList = document.getElementById('editProductosList');
-                    productosList.innerHTML = '';
-                    pedido.productos.forEach(producto => {
-                        productosList.innerHTML += createProductRow(producto);
-                    });
-                    
-                    document.getElementById('editPedidoModal').style.display = 'block';
-                })
-                .catch(error => console.error('Error:', error));
         }
 
         function createProductRow(producto) {
@@ -176,37 +213,6 @@
         function closeEditModal() {
             document.getElementById('editPedidoModal').style.display = 'none';
         }
-
-        document.getElementById('editPedidoForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const idPedido = document.getElementById('editPedidoId').value;
-            const fechaPedido = document.getElementById('editFechaPedido').value;
-            const idEmpleado = document.getElementById('editIdEmpleado').value;
-            
-            const productos = Array.from(document.getElementById('editProductosList').children).map(div => {
-                return {
-                    idProducto: div.dataset.id,
-                    cantidad: parseInt(div.querySelector('input[name="cantidad"]').value)
-                };
-            });
-
-            fetch(`/pedido/${idPedido}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ fechaPedido, idEmpleado, productos }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Success:', data);
-                closeEditModal();
-                loadPedidos();
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-            });
-        });
 
         function deletePedido(idPedido) {
             if (confirm('¿Está seguro de que desea eliminar este pedido?')) {
@@ -276,6 +282,7 @@
                             <p><strong>ID Factura:</strong> ${factura.idFactura}</p>
                             <p><strong>Fecha:</strong> ${new Date(factura.fechaFactura).toLocaleDateString()}</p>
                             <p><strong>Método de Pago:</strong> ${factura.metodoPago}</p>
+                            <p><strong>Número de Mesa:</strong> ${factura.num_mesa}</p>
                             <h3>Productos:</h3>
                             <ul>
                                 ${productosHTML}
