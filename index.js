@@ -166,6 +166,7 @@ app.post('/login', async (req, res) => {
 
         res.json({
             success: true,
+            id: user.id,
             role: user.role
         });
     } catch (error) {
@@ -215,17 +216,24 @@ app.post('/producto', async (req, res) => {
 
     if (isNaN(precio)) {
         console.error('Precio no válido:', precio);
-        return res.status(400).send('Precio no válido');
+        return res.status(400).json({ error: 'Precio no válido' });
     }
 
     if (!idAdmin) {
-        return res.status(400).send('idAdmin es requerido');
+        return res.status(400).json({ error: 'idAdmin es requerido' });
     }
 
-    const queryInsertProducto = 'INSERT INTO producto (idCategoria, descripcion, precio, idAdmin) VALUES (?, ?, ?, ?)';
-    
     try {
+        // Primero, verificamos si el administrador existe
+        const [adminRows] = await promisePool.query('SELECT idAdmin FROM administrador WHERE idAdmin = ?', [idAdmin]);
+        if (adminRows.length === 0) {
+            return res.status(400).json({ error: 'El administrador especificado no existe' });
+        }
+
+        // Si el administrador existe, procedemos a insertar el producto
+        const queryInsertProducto = 'INSERT INTO producto (idCategoria, descripcion, precio, idAdmin) VALUES (?, ?, ?, ?)';
         const [result] = await promisePool.query(queryInsertProducto, [idCategoria, descripcion, precio, idAdmin]);
+        
         const idProducto = result.insertId;
         res.status(201).json({ 
             message: 'Producto agregado exitosamente',
@@ -259,7 +267,7 @@ app.get('/productos', async (req, res) => {
 // Ruta para guardar pedido y detallepedido
 app.post('/pedido', async (req, res) => {
     const { idEmpleado, productos } = req.body;
-    const fechaPedido = new Date();
+    const fechaPedido = new Date(); 
 
     console.log("Iniciando inserción de pedido:", { idEmpleado, productos });
 

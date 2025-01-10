@@ -133,7 +133,7 @@
                 if (!confirmar) return;
 
                 try {
-                    const idEmpleado = localStorage.getItem('idEmpleado');
+                    const idEmpleado = localStorage.getItem('userId');
                     if (!idEmpleado) {
                         alert('No se ha encontrado el ID del empleado. Por favor, inicie sesión nuevamente.');
                         window.location.href = 'index.html';

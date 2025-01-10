@@ -84,18 +84,26 @@
             .catch(error => console.error('Error al guardar la categoría:', error));
         });
 
-        document.getElementById('form-producto').addEventListener('submit', function(event) {
-            event.preventDefault();
-            const categoria = document.getElementById('categoria').value;
-            const precio = document.getElementById('precio').value;
-            const descripcion = document.getElementById('descripcion').value;
+        document.getElementById('form-producto').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const categoria = document.getElementById('categoria').value;
+        const precio = document.getElementById('precio').value;
+        const descripcion = document.getElementById('descripcion').value;
+        const idAdmin = localStorage.getItem('userId'); // Changed from 'idAdmin' to 'userId'
 
-            if (!categoria || !precio || !descripcion) {
-                console.error('Todos los campos son necesarios');
-                return;
-            }
+        if (!categoria || !precio || !descripcion) {
+            alert('Todos los campos son necesarios');
+            return;
+        }
 
-            fetch('/producto', {
+        if (!idAdmin) {
+            alert('No se ha identificado un administrador. Por favor, inicie sesión nuevamente.');
+            // Redirect to login page or handle this error appropriately
+            return;
+        }
+
+        try {
+            const response = await fetch('/producto', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -104,21 +112,26 @@
                     idCategoria: categoria,
                     descripcion,
                     precio: parseFloat(precio),
-                    idAdmin: localStorage.getItem('idAdmin')
+                    idAdmin
                 })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Error en la solicitud: ' + response.statusText);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('Producto agregado:', data);
-                document.getElementById('form-producto').reset();
-            })
-            .catch(error => console.error('Error al agregar producto:', error));
-        });
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al agregar el producto');
+            }
+
+            const data = await response.json();
+            console.log('Producto agregado:', data);
+            alert(data.message || 'Producto agregado exitosamente');
+            document.getElementById('form-producto').reset();
+            // You might want to update the UI here, e.g., refresh a product list
+            // updateProductList(); // Implement this function if needed
+        } catch (error) {
+            console.error('Error al agregar producto:', error);
+            alert(error.message || 'Error al agregar el producto. Por favor, intente nuevamente.');
+        }
+    });
 
         function checkAuth() {
         fetch('/isAuthenticated', {
