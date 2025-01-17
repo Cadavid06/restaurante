@@ -100,6 +100,7 @@ const protectedPages = [
 
 protectedPages.forEach(page => {
     app.get(`/${page}`, (req, res) => {
+        res.set('Cache-Control', 'no-store'); // Desactiva el caché
         res.sendFile(path.join(__dirname, page));
     });
 });
