@@ -23,7 +23,7 @@ app.use(express.static(path.join(__dirname)));
 app.use('/public', express.static(config.publicPath));
 
 // Configuración del pool de conexiones a la base de datos
-const poolConfig = process.env.NODE_ENV === 'production'
+const getPoolConfig = () => process.env.NODE_ENV === 'production'
     ? {
         host: process.env.MYSQLHOST,
         user: process.env.MYSQLUSER,   
@@ -42,10 +42,39 @@ const poolConfig = process.env.NODE_ENV === 'production'
         connectionLimit: 10
     };
 
-const pool = mysql.createPool(poolConfig);
+let pool;
+let promisePool;
 
-// Promisify for Node.js async/await.
-const promisePool = pool.promise();
+const createPool = () => {
+    pool = mysql.createPool(getPoolConfig());
+    promisePool = pool.promise();
+};
+
+const handleDisconnect = () => {
+    createPool();
+    
+    pool.getConnection((err, connection) => {
+        if (err) {
+            console.log('Error when connecting to db:', err);
+            setTimeout(handleDisconnect, 2000);
+        } else {
+            connection.release();
+            console.log('Database connection re-established');
+        }
+    });
+
+    pool.on('error', (err) => {
+        console.log('Database error', err);
+        if (err.code === 'PROTOCOL_CONNECTION_LOST') {
+            handleDisconnect();
+        } else {
+            throw err;
+        }
+    });
+};
+
+// Inicializar la conexión
+handleDisconnect();
 
 // Test database connection
 async function testDbConnection() {
@@ -54,10 +83,26 @@ async function testDbConnection() {
         console.log('Database connection successful');
     } catch (error) {
         console.error('Error connecting to the database:', error);
+        // Intentar reconectar
+        handleDisconnect();
     }
 }
 
+// Ejecutar la prueba de conexión inicial
 testDbConnection();
+
+// Función para obtener una conexión del pool con reintentos
+const getConnection = async (retries = 5) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await promisePool.getConnection();
+        } catch (error) {
+            console.error(`Attempt ${i + 1} failed to get connection:`, error);
+            if (i === retries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo antes de reintentar
+        }
+    }
+};
 
 // Middleware de autenticación
 function authenticateToken(req, res, next) {
@@ -114,8 +159,10 @@ app.post('/crearUsuario', async (req, res) => {
         UNION ALL
         SELECT 'empleado' as role FROM empleado WHERE nombre = ?
     `;
+    let connection;
     try {
-        const [results] = await promisePool.query(checkUserQuery, [email, email]);
+        connection = await getConnection();
+        const [results] = await connection.query(checkUserQuery, [email, email]);
         if (results.length > 0) {
             console.log('Usuario ya existe:', email);
             return res.status(400).json({ success: false, message: 'El correo electrónico ya está registrado' });
@@ -126,12 +173,14 @@ app.post('/crearUsuario', async (req, res) => {
             ? 'INSERT INTO administrador (nombre, contraseña) VALUES (?, ?)'
             : 'INSERT INTO empleado (nombre, contraseña) VALUES (?, ?)';
         
-        await promisePool.query(insertQuery, [email, hashedPassword]);
+        await connection.query(insertQuery, [email, hashedPassword]);
         console.log('Usuario creado exitosamente:', email);
         res.status(201).json({ success: true, message: 'Usuario creado exitosamente' });
     } catch (error) {
         console.error('Error al crear usuario:', error);
         res.status(500).json({ success: false, message: 'Error al crear el usuario' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -144,8 +193,10 @@ app.post('/login', async (req, res) => {
         UNION ALL
         SELECT 'empleado' as role, idEmpleado as id, nombre, contraseña FROM empleado WHERE nombre = ?
     `;
+    let connection;
     try {
-        const [results] = await promisePool.query(query, [email, email]);
+        connection = await getConnection();
+        const [results] = await connection.query(query, [email, email]);
         if (results.length === 0) {
             return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos' });
         }
@@ -172,6 +223,8 @@ app.post('/login', async (req, res) => {
     } catch (error) {
         console.error('Error en la base de datos durante el login:', error);
         res.status(500).json({ success: false, message: 'Error en la base de datos' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -189,23 +242,31 @@ app.post('/logout', (req, res) => {
 app.post('/categoria', async (req, res) => {
     const { nombre_cat } = req.body;
     const query = 'INSERT INTO categoria (nombre_categoria) VALUES (?)';
+    let connection;
     try {
-        const [result] = await promisePool.query(query, [nombre_cat]);
+        connection = await getConnection();
+        const [result] = await connection.query(query, [nombre_cat]);
         res.status(201).json({ id: result.insertId, nombre_categoria: nombre_cat });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Ruta para obtener todas las categorías
 app.get('/categorias', async (req, res) => {
+    let connection;
     try {
-        const [results] = await promisePool.query('SELECT * FROM categoria');
+        connection = await getConnection();
+        const [results] = await connection.query('SELECT * FROM categoria');
         console.log('Categorías obtenidas:', results);
         res.status(200).json(results);
     } catch (err) {
         console.error('Error al obtener categorías:', err);
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -223,16 +284,18 @@ app.post('/producto', async (req, res) => {
         return res.status(400).json({ error: 'idAdmin es requerido' });
     }
 
+    let connection;
     try {
+        connection = await getConnection();
         // Primero, verificamos si el administrador existe
-        const [adminRows] = await promisePool.query('SELECT idAdmin FROM administrador WHERE idAdmin = ?', [idAdmin]);
+        const [adminRows] = await connection.query('SELECT idAdmin FROM administrador WHERE idAdmin = ?', [idAdmin]);
         if (adminRows.length === 0) {
             return res.status(400).json({ error: 'El administrador especificado no existe' });
         }
 
         // Si el administrador existe, procedemos a insertar el producto
         const queryInsertProducto = 'INSERT INTO producto (idCategoria, descripcion, precio, idAdmin) VALUES (?, ?, ?, ?)';
-        const [result] = await promisePool.query(queryInsertProducto, [idCategoria, descripcion, precio, idAdmin]);
+        const [result] = await connection.query(queryInsertProducto, [idCategoria, descripcion, precio, idAdmin]);
         
         const idProducto = result.insertId;
         res.status(201).json({ 
@@ -246,6 +309,8 @@ app.post('/producto', async (req, res) => {
     } catch (err) {
         console.error('Error al agregar producto:', err);
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -256,11 +321,15 @@ app.get('/productos', async (req, res) => {
         FROM producto p
         JOIN categoria c ON p.idCategoria = c.idCategoria
     `;
+    let connection;
     try {
-        const [results] = await promisePool.query(query);
+        connection = await getConnection();
+        const [results] = await connection.query(query);
         res.json(results);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -278,32 +347,29 @@ app.post('/pedido', async (req, res) => {
 
     const pedidoQuery = 'INSERT INTO pedido (fechaPedido, idEmpleado, num_mesa) VALUES (?, ?, ?)';
     
+    let connection;
     try {
-        const connection = await promisePool.getConnection();
+        connection = await getConnection();
         await connection.beginTransaction();
 
-        try {
-            const [result] = await connection.query(pedidoQuery, [fechaPedido, idEmpleado, num_mesa]);
-            const idPedido = result.insertId;
-            console.log("Pedido insertado con ID:", idPedido);
+        const [result] = await connection.query(pedidoQuery, [fechaPedido, idEmpleado, num_mesa]);
+        const idPedido = result.insertId;
+        console.log("Pedido insertado con ID:", idPedido);
 
-            const detalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES (?, ?, ?)';
-            for (const producto of productosValidos) {
-                await connection.query(detalleQuery, [idPedido, producto.idProducto, producto.cantidad]);
-                console.log("Producto insertado en detallepedido:", producto);
-            }
-
-            await connection.commit();
-            res.status(201).json({ success: true, idPedido });
-        } catch (err) {
-            await connection.rollback();
-            throw err;
-        } finally {
-            connection.release();
+        const detalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES (?, ?, ?)';
+        for (const producto of productosValidos) {
+            await connection.query(detalleQuery, [idPedido, producto.idProducto, producto.cantidad]);
+            console.log("Producto insertado en detallepedido:", producto);
         }
+
+        await connection.commit();
+        res.status(201).json({ success: true, idPedido });
     } catch (err) {
+        if (connection) await connection.rollback();
         console.error("Error en la inserción del pedido:", err);
         res.status(500).json({ success: false, error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -314,11 +380,15 @@ app.get('/usuarios', async (req, res) => {
         UNION ALL
         SELECT idAdmin as id, nombre, 'administrador' as role FROM administrador
     `;
+    let connection;
     try {
-        const [results] = await promisePool.query(query);
+        connection = await getConnection();
+        const [results] = await connection.query(query);
         res.json(results);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -330,12 +400,16 @@ app.get('/usuario/:id', async (req, res) => {
         UNION ALL
         SELECT idAdmin as id, nombre, 'administrador' as role FROM administrador WHERE idAdmin = ?
     `;
+    let connection;
     try {
-        const [results] = await promisePool.query(query, [id, id]);
+        connection = await getConnection();
+        const [results] = await connection.query(query, [id, id]);
         if (results.length === 0) return res.status(404).json({ message: 'Usuario no encontrado' });
         res.json(results[0]);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -356,22 +430,26 @@ app.put('/usuario/:id', async (req, res) => {
     query += ` WHERE ${idField} = ?`;
     params.push(id);
 
+    let connection;
     try {
-        const [result] = await promisePool.query(query, params);
+        connection = await getConnection();
+        const [result] = await connection.query(query, params);
         if (result.affectedRows === 0) {
             const moveQuery = `INSERT INTO ${newTable} (nombre, contraseña) 
                                SELECT nombre, contraseña FROM ${oldTable} WHERE ${oldTable === 'empleado' ? 'idEmpleado' : 'idAdmin'} = ?`;
-            const [moveResult] = await promisePool.query(moveQuery, [id]);
+            const [moveResult] = await connection.query(moveQuery, [id]);
             if (moveResult.affectedRows === 0) {
                 return res.status(404).json({ message: 'Usuario no encontrado' });
             }
-            await promisePool.query(`DELETE FROM ${oldTable} WHERE ${oldTable === 'empleado' ? 'idEmpleado' : 'idAdmin'} = ?`, [id]);
+            await connection.query(`DELETE FROM ${oldTable} WHERE ${oldTable === 'empleado' ? 'idEmpleado' : 'idAdmin'} = ?`, [id]);
             res.json({ message: 'Usuario actualizado y movido exitosamente' });
         } else {
             res.json({ message: 'Usuario actualizado exitosamente' });
         }
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -380,15 +458,17 @@ app.delete('/usuario/:id', async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
     
+    let connection;
     try {
+        connection = await getConnection();
         let result;
         
         if (role === 'empleado') {
             // Solo eliminamos de la tabla empleado
-            [result] = await promisePool.query('DELETE FROM empleado WHERE idEmpleado = ?', [id]);
+            [result] = await connection.query('DELETE FROM empleado WHERE idEmpleado = ?', [id]);
         } else if (role === 'administrador') {
             // Solo eliminamos de la tabla administrador
-            [result] = await promisePool.query('DELETE FROM administrador WHERE idAdmin = ?', [id]);
+            [result] = await connection.query('DELETE FROM administrador WHERE idAdmin = ?', [id]);
         } else {
             return res.status(400).json({ error: 'Rol no válido' });
         }
@@ -402,28 +482,38 @@ app.delete('/usuario/:id', async (req, res) => {
     } catch (err) {
         console.error("Error al eliminar usuario:", err);
         res.status(500).json({ error: 'Error al eliminar usuario' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Obtener todas las categorías
 app.get('/categorias', async (req, res) => {
+    let connection;
     try {
-        const [results] = await promisePool.query('SELECT idCategoria as id, nombre_categoria as nombre FROM categoria');
+        connection = await getConnection();
+        const [results] = await connection.query('SELECT idCategoria as id, nombre_categoria as nombre FROM categoria');
         res.json(results);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Obtener una categoría específica
 app.get('/categoria/:id', async (req, res) => {
     const { id } = req.params;
+    let connection;
     try {
-        const [results] = await promisePool.query('SELECT idCategoria as id, nombre_categoria as nombre FROM categoria WHERE idCategoria = ?', [id]);
+        connection = await getConnection();
+        const [results] = await connection.query('SELECT idCategoria as id, nombre_categoria as nombre FROM categoria WHERE idCategoria = ?', [id]);
         if (results.length === 0) return res.status(404).json({ message: 'Categoría no encontrada' });
         res.json(results[0]);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -432,8 +522,10 @@ app.put('/categoria/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre_categoria } = req.body;
 
+    let connection;
     try {
-        const [result] = await promisePool.query('UPDATE categoria SET nombre_categoria = ? WHERE idCategoria = ?', [nombre_categoria, id]);
+        connection = await getConnection();
+        const [result] = await connection.query('UPDATE categoria SET nombre_categoria = ? WHERE idCategoria = ?', [nombre_categoria, id]);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Categoría no encontrada' });
         }
@@ -441,6 +533,8 @@ app.put('/categoria/:id', async (req, res) => {
     } catch (err) {
         console.error("Error al actualizar categoría:", err);
         res.status(500).json({ error: 'Error al actualizar categoría' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -448,36 +542,48 @@ app.put('/categoria/:id', async (req, res) => {
 app.delete('/categoria/:id', async (req, res) => {
     const { id } = req.params;
     
+    let connection;
     try {
-        const [result] = await promisePool.query('DELETE FROM categoria WHERE idCategoria = ?', [id]);
+        connection = await getConnection();
+        const [result] = await connection.query('DELETE FROM categoria WHERE idCategoria = ?', [id]);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Categoría no encontrada' });
         }
         res.json({ message: 'Categoría eliminada exitosamente' });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Obtener todos los productos
 app.get('/productos', async (req, res) => {
+    let connection;
     try {
-        const [results] = await promisePool.query('SELECT idProducto as id, descripcion, precio, idCategoria FROM producto');
+        connection = await getConnection();
+        const [results] = await connection.query('SELECT idProducto as id, descripcion, precio, idCategoria FROM producto');
         res.json(results);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Obtener un producto específico
 app.get('/producto/:id', async (req, res) => {
     const { id } = req.params;
+    let connection;
     try {
-        const [results] = await promisePool.query('SELECT idProducto as id, descripcion, precio, idCategoria FROM producto WHERE idProducto = ?', [id]);
+        connection = await getConnection();
+        const [results] = await connection.query('SELECT idProducto as id, descripcion, precio, idCategoria FROM producto WHERE idProducto = ?', [id]);
         if (results.length === 0) return res.status(404).json({ message: 'Producto no encontrado' });
         res.json(results[0]);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -485,8 +591,10 @@ app.get('/producto/:id', async (req, res) => {
 app.put('/producto/:id', async (req, res) => {
     const { id } = req.params;
     const { descripcion, precio, idCategoria } = req.body;
+    let connection;
     try {
-        const [result] = await promisePool.query('UPDATE producto SET descripcion = ?, precio = ?, idCategoria = ? WHERE idProducto = ?', [descripcion, precio, idCategoria, id]);
+        connection = await getConnection();
+        const [result] = await connection.query('UPDATE producto SET descripcion = ?, precio = ?, idCategoria = ? WHERE idProducto = ?', [descripcion, precio, idCategoria, id]);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Producto no encontrado' });
         }
@@ -494,14 +602,18 @@ app.put('/producto/:id', async (req, res) => {
     } catch (err) {
         console.error('Error al actualizar producto:', err);
         res.status(500).json({ error: 'Error al actualizar producto' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Ruta para eliminar un producto
 app.delete('/producto/:id', async (req, res) => {
     const { id } = req.params;
+    let connection;
     try {
-        const [result] = await promisePool.query('DELETE FROM producto WHERE idProducto = ?', [id]);
+        connection = await getConnection();
+        const [result] = await connection.query('DELETE FROM producto WHERE idProducto = ?', [id]);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Producto no encontrado' });
         }
@@ -509,17 +621,23 @@ app.delete('/producto/:id', async (req, res) => {
     } catch (err) {
         console.error('Error al eliminar producto:', err);
         res.status(500).json({ error: 'Error al eliminar producto' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Obtener todos los pedidos
 app.get('/pedidos', async (req, res) => {
+    let connection;
     try {
-        const [results] = await promisePool.query('SELECT * FROM pedido');
+        connection = await getConnection();
+        const [results] = await connection.query('SELECT * FROM pedido');
         res.json(results);
     } catch (error) {
         console.error('Error fetching pedidos:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -533,8 +651,10 @@ app.get('/pedido/:id', async (req, res) => {
         JOIN producto pr ON dp.idProducto = pr.idProducto
         WHERE p.idPedido = ?
     `;
+    let connection;
     try {
-        const [results] = await promisePool.query(query, [idPedido]);
+        connection = await getConnection();
+        const [results] = await connection.query(query, [idPedido]);
         if (results.length === 0) {
             return res.status(404).json({ message: 'Pedido no encontrado' });
         }
@@ -553,30 +673,35 @@ app.get('/pedido/:id', async (req, res) => {
     } catch (error) {
         console.error('Error fetching pedido:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // Actualizar un pedido
 app.put('/pedido/:id', async (req, res) => {
     const idPedido = req.params.id;
-    const { fechaPedido, idEmpleado, num_mesa, productos } = req.body;
+    const { num_mesa, productos } = req.body;
 
-    const connection = await promisePool.getConnection();
+    let connection;
     try {
+        connection = await getConnection();
         await connection.beginTransaction();
 
-        // Primero actualizamos el pedido básico
-        await connection.query('UPDATE pedido SET fechaPedido = ?, idEmpleado = ?, num_mesa = ? WHERE idPedido = ?', [fechaPedido, idEmpleado, num_mesa, idPedido]);
+        // Only update num_mesa
+        await connection.query('UPDATE pedido SET num_mesa = ? WHERE idPedido = ?', [num_mesa, idPedido]);
 
-        // Luego eliminamos los detalles antiguos
+        // Delete old details
         await connection.query('DELETE FROM detallepedido WHERE idPedido = ?', [idPedido]);
 
-        // Insertamos los nuevos detalles
-        const insertDetalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES ?';
-        const detalles = productos.map(p => [idPedido, p.idProducto, p.cantidad]);
-        await connection.query(insertDetalleQuery, [detalles]);
+        // Insert new details
+        if (productos && productos.length > 0) {
+            const insertDetalleQuery = 'INSERT INTO detallepedido (idPedido, idProducto, cantidad) VALUES ?';
+            const detalles = productos.map(p => [idPedido, p.idProducto, p.cantidad]);
+            await connection.query(insertDetalleQuery, [detalles]);
+        }
 
-        // Calculamos el nuevo total
+        // Calculate new total
         const [totalResults] = await connection.query(`
             SELECT SUM(dp.cantidad * p.precio) as total
             FROM detallepedido dp
@@ -584,9 +709,9 @@ app.put('/pedido/:id', async (req, res) => {
             WHERE dp.idPedido = ?
         `, [idPedido]);
 
-        const nuevoTotal = totalResults[0].total;
+        const nuevoTotal = totalResults[0].total || 0;
 
-        // Actualizamos la factura con el nuevo total si existe
+        // Update invoice with new total if it exists
         await connection.query('UPDATE factura SET totalPago = ? WHERE idPedido = ?', [nuevoTotal, idPedido]);
 
         await connection.commit();
@@ -595,11 +720,11 @@ app.put('/pedido/:id', async (req, res) => {
             nuevoTotal: nuevoTotal
         });
     } catch (error) {
-        await connection.rollback();
+        if (connection) await connection.rollback();
         console.error('Error updating pedido:', error);
         res.status(500).json({ error: 'Error al actualizar el pedido' });
     } finally {
-        connection.release();
+        if (connection) connection.release();
     }
 });
 
@@ -607,8 +732,9 @@ app.put('/pedido/:id', async (req, res) => {
 app.delete('/pedido/:id', async (req, res) => {
     const idPedido = req.params.id;
 
-    const connection = await promisePool.getConnection();
+    let connection;
     try {
+        connection = await getConnection();
         await connection.beginTransaction();
 
         await connection.query('DELETE FROM detallepedido WHERE idPedido = ?', [idPedido]);
@@ -617,11 +743,11 @@ app.delete('/pedido/:id', async (req, res) => {
         await connection.commit();
         res.json({ message: 'Pedido eliminado con éxito' });
     } catch (error) {
-        await connection.rollback();
+        if (connection) await connection.rollback();
         console.error('Error deleting pedido:', error);
         res.status(500).json({ error: 'Error al eliminar el pedido' });
     } finally {
-        connection.release();
+        if (connection) connection.release();
     }
 });
 
@@ -630,9 +756,11 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
     const idPedido = req.params.idPedido;
     const { metodoPago } = req.body;
 
+    let connection;
     try {
+        connection = await getConnection();
         // Primero, verificar si ya existe una factura para este pedido
-        const [checkResults] = await promisePool.query('SELECT idFactura FROM factura WHERE idPedido = ?', [idPedido]);
+        const [checkResults] = await connection.query('SELECT idFactura FROM factura WHERE idPedido = ?', [idPedido]);
         
         if (checkResults.length > 0) {
             // Ya existe una factura para este pedido
@@ -640,7 +768,7 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
         }
 
         // Si no existe factura, procedemos a crearla
-        const [pedidoResults] = await promisePool.query(`
+        const [pedidoResults] = await connection.query(`
             SELECT p.idPedido, p.fechaPedido, p.idEmpleado, dp.idProducto, dp.cantidad, pr.precio
             FROM pedido p
             JOIN detallepedido dp ON p.idPedido = dp.idPedido
@@ -654,7 +782,7 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
 
         const totalPago = pedidoResults.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
 
-        const [insertResult] = await promisePool.query(
+        const [insertResult] = await connection.query(
             'INSERT INTO factura (idPedido, fechaFactura, metodoPago, totalPago) VALUES (?, NOW(), ?, ?)',
             [idPedido, metodoPago, totalPago]
         );
@@ -663,6 +791,8 @@ app.post('/generar-factura/:idPedido', async (req, res) => {
     } catch (error) {
         console.error('Error generating factura:', error);
         res.status(500).json({ error: 'Error al generar la factura' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -681,8 +811,10 @@ app.get('/factura/:idPedido', async (req, res) => {
         WHERE f.idPedido = ?
     `;
 
+    let connection;
     try {
-        const [results] = await promisePool.query(query, [idPedido]);
+        connection = await getConnection();
+        const [results] = await connection.query(query, [idPedido]);
 
         if (results.length === 0) {
             return res.status(404).json({ message: 'Factura no encontrada' });
@@ -712,13 +844,15 @@ app.get('/factura/:idPedido', async (req, res) => {
 
         // Actualizar el total en la base de datos si es diferente
         if (total !== results[0].totalPago) {
-            await promisePool.query('UPDATE factura SET totalPago = ? WHERE idPedido = ?', [total, idPedido]);
+            await connection.query('UPDATE factura SET totalPago = ? WHERE idPedido = ?', [total, idPedido]);
         }
 
         res.json(factura);
     } catch (error) {
         console.error('Error fetching factura:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -763,8 +897,10 @@ app.get('/consulta-facturas', async (req, res) => {
             MIN(f.fechaFactura)
     `;
 
+    let connection;
     try {
-        const [detalles] = await promisePool.query(query, [fechaInicio, fechaFin]);
+        connection = await getConnection();
+        const [detalles] = await connection.query(query, [fechaInicio, fechaFin]);
 
         // Calcular totales
         const totalFacturas = detalles.reduce((sum, row) => sum + row.cantidad, 0);
@@ -782,6 +918,8 @@ app.get('/consulta-facturas', async (req, res) => {
     } catch (error) {
         console.error('Error en la consulta de facturas:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -806,8 +944,10 @@ app.get('/consulta-empleados-facturaron', async (req, res) => {
         ORDER BY montoTotal DESC
     `;
 
+    let connection;
     try {
-        const [results] = await promisePool.query(query, [fechaInicio, fechaFin]);
+        connection = await getConnection();
+        const [results] = await connection.query(query, [fechaInicio, fechaFin]);
 
         // Ensure numeric values
         const formattedResults = results.map(row => ({
@@ -820,6 +960,8 @@ app.get('/consulta-empleados-facturaron', async (req, res) => {
     } catch (error) {
         console.error('Error en la consulta de empleados:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -836,8 +978,10 @@ app.get('/generar-factura-pdf/:idFactura', async (req, res) => {
         WHERE f.idFactura = ?
     `;
 
+    let connection;
     try {
-        const [results] = await promisePool.query(query, [idFactura]);
+        connection = await getConnection();
+        const [results] = await connection.query(query, [idFactura]);
 
         if (results.length === 0) {
             return res.status(404).json({ error: 'Factura no encontrada' });
@@ -872,6 +1016,8 @@ app.get('/generar-factura-pdf/:idFactura', async (req, res) => {
     } catch (error) {
         console.error('Error al generar factura PDF:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -902,8 +1048,10 @@ app.get('/consulta-productos-mas-vendidos', async (req, res) => {
         LIMIT ?
     `;
 
+    let connection;
     try {
-        const [results] = await promisePool.query(query, [fechaInicio, fechaFin, parseInt(limite)]);
+        connection = await getConnection();
+        const [results] = await connection.query(query, [fechaInicio, fechaFin, parseInt(limite)]);
 
         // Ensure numeric values
         const formattedResults = results.map(row => ({
@@ -916,6 +1064,8 @@ app.get('/consulta-productos-mas-vendidos', async (req, res) => {
     } catch (error) {
         console.error('Error en la consulta de productos más vendidos:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
