@@ -76,8 +76,41 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Servir todos los archivos estáticos desde el directorio raíz
-app.use(express.static(path.join(__dirname)));
+// Middleware para verificar roles
+function authorizeRoles(allowedRoles) {
+    return (req, res, next) => {
+        const { role } = req.user; // El rol se extrae del token decodificado
+        if (!allowedRoles.includes(role)) {
+            return res.status(403).json({ message: 'Acceso denegado' });
+        }
+        next();
+    };
+}
+
+// Rutas protegidas con roles específicos
+app.get('/menu.html', authenticateToken, authorizeRoles(['empleado']), (req, res) => {
+    res.sendFile(path.join(__dirname, 'menu.html'));
+});
+
+app.get('/gestion_pedidos.html', authenticateToken, authorizeRoles(['empleado']), (req, res) => {
+    res.sendFile(path.join(__dirname, 'gestion_pedidos.html'));
+});
+
+app.get('/agg_products.html', authenticateToken, authorizeRoles(['administrador']), (req, res) => {
+    res.sendFile(path.join(__dirname, 'agg_products.html'));
+});
+
+app.get('/gestion_usuarios.html', authenticateToken, authorizeRoles(['administrador']), (req, res) => {
+    res.sendFile(path.join(__dirname, 'gestion_usuarios.html'));
+});
+
+app.get('/gestion_admin.html', authenticateToken, authorizeRoles(['administrador']), (req, res) => {
+    res.sendFile(path.join(__dirname, 'gestion_admin.html'));
+});
+
+app.get('/consultas.html', authenticateToken, authorizeRoles(['administrador']), (req, res) => {
+    res.sendFile(path.join(__dirname, 'consultas.html'));
+});
 
 // Ruta principal
 app.get('/', (req, res) => {

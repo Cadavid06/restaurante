@@ -231,6 +231,23 @@
         })
         .catch(error => console.error('Error al cerrar sesión:', error));
     });
+
+    function checkRole(allowedRoles) {
+    fetch('/isAuthenticated', { method: 'GET', credentials: 'include' })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.authenticated || !allowedRoles.includes(data.user.role)) {
+                alert("Acceso denegado");
+                window.location.href = '/';
+            }
+        })
+        .catch(() => {
+            window.location.href = '/';
+        });
+    }
+
+    checkRole(['administrador']); // Solo administrador pueden acceder a esta página
+
     </script>
 </body>
 </html>
