@@ -52,7 +52,6 @@
                 <label for="categoriaNombre">Nombre de la categoría:</label>
                 <input type="text" id="categoriaNombre" required>
                 <button type="submit">Guardar Cambios</button>
-                <button id="logoutButton">Cerrar sesión</button>
             </form>
         </div>
 
@@ -241,7 +240,7 @@
         .catch(() => {
             window.location.href = '/';
         });
-    }
+        }
 
     // Check authentication on page load
     checkAuth();
@@ -268,6 +267,8 @@
         })
         .catch(error => console.error('Error al cerrar sesión:', error));
     });
+
+    
 
     function checkRole(allowedRoles) {
     fetch('/isAuthenticated', { method: 'GET', credentials: 'include' })
