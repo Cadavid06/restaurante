@@ -114,12 +114,13 @@ function displayPedidos() {
                 <td>
                     <button onclick="editPedido(${pedido.idPedido})">Editar</button>
                     <button onclick="deletePedido(${pedido.idPedido})">Eliminar</button>
+                    <button onclick="generarFactura(${pedido.idPedido})">Generar Factura</button>
+                    <button onclick="mostrarFactura(${pedido.idPedido})">Mostrar Factura</button>
                     <select id="metodoPago_${pedido.idPedido}">
                         <option value="Efectivo">Efectivo</option>
                         <option value="Transferencia">Transferencia</option>
                     </select>
-                    <button onclick="generarFactura(${pedido.idPedido})">Generar Factura</button>
-                    <button onclick="mostrarFactura(${pedido.idPedido})">Mostrar Factura</button>
+                    
                 </td>
             </tr>
         `;
