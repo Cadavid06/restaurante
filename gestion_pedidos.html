@@ -1,79 +1,88 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión de Pedidos</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-    <div class="container">
-        <h1>Gestión de Pedidos</h1>
-        
-        <div class="search-sort">
-            <input type="text" id="searchInput" placeholder="Buscar pedido...">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Gestión de Pedidos</title>
+        <link rel="stylesheet" href="styles.css">
+    </head>
+    <body>
+        <div class="container">
+            <h1>Gestión de Pedidos</h1>
+
+            <div class="search-sort">
+                <input type="text" id="searchInput"
+                    placeholder="Buscar pedido...">
+            </div>
+
+            <div class="table-responsive">
+                <div class="table-scroll-indicator">← Desliza horizontalmente
+                    →</div>
+                <table id="pedidosTable">
+                    <thead>
+                        <tr>
+                            <th>ID Pedido</th>
+                            <th>Fecha Pedido</th>
+                            <th>ID Empleado</th>
+                            <th>Número de Mesa</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pedidosTableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <button id="prevPage">Anterior</button>
+                <span id="pageInfo"></span>
+                <button id="nextPage">Siguiente</button>
+            </div>
         </div>
 
-        <table id="pedidosTable">
-            <thead>
-                <tr>
-                    <th>ID Pedido</th>
-                    <th>Fecha Pedido</th>
-                    <th>ID Empleado</th>
-                    <th>Número de Mesa</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody id="pedidosTableBody"></tbody>
-        </table>
-
-        <div class="pagination">
-            <button id="prevPage">Anterior</button>
-            <span id="pageInfo"></span>
-            <button id="nextPage">Siguiente</button>
+        <div id="editPedidoModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Editar Pedido</h2>
+                <form id="editPedidoForm">
+                    <input type="hidden" id="editPedidoId" />
+                    <p id="editFechaPedido"></p>
+                    <p id="editIdEmpleado"></p>
+                    <label for="editNumMesa">Número de Mesa:</label>
+                    <input type="number" id="editNumMesa" required />
+                    <h3>Productos del Pedido</h3>
+                    <div id="editProductosList"></div>
+                    <h3>Añadir productos</h3>
+                    <div class="add-product-section">
+                        <label for="productSelect">Producto:</label>
+                        <select id="productSelect"></select>
+                        <label for="productQuantity">Cantidad:</label>
+                        <input type="number" id="productQuantity" min="1"
+                            value="1" />
+                        <button type="button"
+                            onclick="addProductToPedido()">Añadir
+                            Producto</button>
+                    </div>
+                    <button type="submit">Guardar Cambios</button>
+                    <button type="button"
+                        onclick="closeModal('editPedidoModal')">Cancelar</button>
+                </form>
+            </div>
         </div>
-    </div>
 
-    <div id="editPedidoModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Editar Pedido</h2>
-            <form id="editPedidoForm">
-                <input type="hidden" id="editPedidoId" />
-                <p id="editFechaPedido"></p>
-                <p id="editIdEmpleado"></p>
-                <label for="editNumMesa">Número de Mesa:</label>
-                <input type="number" id="editNumMesa" required />
-                <h3>Productos del Pedido</h3>
-                <div id="editProductosList"></div>
-                <h3>Añadir productos</h3>
-                <div class="add-product-section">
-                    <label for="productSelect">Producto:</label>
-                    <select id="productSelect"></select>
-                    <label for="productQuantity">Cantidad:</label>
-                    <input type="number" id="productQuantity" min="1" value="1" />
-                    <button type="button" onclick="addProductToPedido()">Añadir Producto</button>
-                </div>
-                <button type="submit">Guardar Cambios</button>
-                <button type="button" onclick="closeModal('editPedidoModal')">Cancelar</button>
-            </form>
+        <div id="facturaModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Información de la Factura</h2>
+                <div id="facturaInfo"></div>
+            </div>
         </div>
-    </div>
 
-    <div id="facturaModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Información de la Factura</h2>
-            <div id="facturaInfo"></div>
+        <div class="footer">
+            <li><a href="menu.html">Regresar al menú</a></li>
+            <button id="logoutButton">Cerrar sesión</button>
         </div>
-    </div>
 
-    <div class="footer">
-        <li><a href="menu.html">Regresar al menú</a></li>
-        <button id="logoutButton">Cerrar sesión</button>
-    </div>
-
-<script>
+        <script>
 let allPedidos = [];
 let currentPage = 1;
 const pedidosPerPage = 10;
@@ -454,5 +463,5 @@ function checkRole(allowedRoles) {
 checkRole(['empleado']); // Solo empleados pueden acceder a esta página
 
 </script>
-</body>
+    </body>
 </html>

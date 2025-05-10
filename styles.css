@@ -3,13 +3,13 @@
 :root {
   --primary-color: #4f46e5;
   --primary-hover: #4338ca;
-  --success-color: #10b981;
+  --success-color: #13ff69;
   --success-hover: #059669;
   --danger-color: #ef4444;
   --danger-hover: #dc2626;
   --text-color: #1f2937;
   --text-light: #6b7280;
-  --bg-color: #f9fafb;
+  --bg-color: #f3f4f6;
   --bg-card: #ffffff;
   --border-color: #e5e7eb;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -81,6 +81,15 @@ body {
   width: 100%;
   max-width: 500px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  margin: 0 auto 1.5rem; /* Centrado horizontal y separación vertical */
+}
+
+/* Ajuste específico para las cajas de pedido y factura */
+.menu .box, 
+#pedidoResumen, 
+#facturaPreview {
+  max-width: 600px;
+  margin: 0 auto 2rem; /* Mayor separación vertical */
 }
 
 .box:hover {
@@ -119,6 +128,16 @@ input, select, textarea {
   width: 100%;
 }
 
+/* Ajuste para el selector de método de pago */
+select#metodoPago, 
+table select {
+  width: auto;
+  min-width: 150px;
+  max-width: 200px;
+  margin: 0 auto 1rem;
+  display: block;
+}
+
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--primary-color);
@@ -148,6 +167,15 @@ form button {
   min-width: 120px;
   margin: 0 auto;
   margin-top: 0.5rem;
+}
+
+/* Contenedor de botones para centrarlos */
+.button-group {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
 }
 
 /* Enlaces */
@@ -200,7 +228,11 @@ form a {
   padding: 2rem;
   width: 100%;
   max-width: 400px;
-  margin: 2rem auto;
+  margin: 0 auto;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .login-box h2 {
@@ -229,6 +261,7 @@ table {
   background-color: var(--bg-card);
   border-radius: 0.5rem;
   overflow: hidden;
+  display: table;
 }
 
 th, td {
@@ -245,6 +278,21 @@ th {
 
 tr:hover {
   background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Tablas responsivas */
+.table-responsive {
+  overflow-x: auto;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+  display: block;
+  max-width: 100%;
+}
+
+/* Envolver todas las tablas en un contenedor con scroll horizontal */
+table {
+  min-width: 650px; /* Ancho mínimo para asegurar que todas las columnas sean visibles */
 }
 
 /* Modales */
@@ -353,6 +401,18 @@ tr:hover {
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 1rem;
   width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* Estilos específicos para las cajas de resumen de pedido y vista previa de factura */
+#pedidoResumen, 
+#facturaTextArea,
+.box:has(#pedidoResumen),
+.box:has(#facturaTextArea) {
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .boxCat {
@@ -385,10 +445,32 @@ tr:hover {
   font-size: 0.875rem;
 }
 
+/* Botones de acción en tablas */
+table button {
+  margin: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .box {
     max-width: 100%;
+  }
+  
+  #pedidoResumen, 
+  #facturaTextArea,
+  .box:has(#pedidoResumen),
+  .box:has(#facturaTextArea) {
+    max-width: 90%;
+  }
+  
+  /* Asegurar que las tablas tengan scroll horizontal */
+  .table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
   }
 }
 
@@ -404,6 +486,34 @@ tr:hover {
   
   th, td {
     padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .login-box {
+    width: 90%;
+    max-width: 350px;
+  }
+  
+  .button-group {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .button-group button {
+    width: 100%;
+    max-width: 200px;
+  }
+  
+  /* Ajustar tamaño de texto en tablas para móviles */
+  table {
+    font-size: 0.875rem;
+  }
+  
+  /* Hacer que los botones de acción sean más compactos */
+  table button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    margin: 0.125rem;
   }
 }
 
@@ -426,5 +536,44 @@ tr:hover {
   
   .login-box {
     padding: 1.5rem;
+    width: 85%;
+  }
+  
+  select#metodoPago, 
+  table select {
+    min-width: 120px;
+  }
+  
+  /* Ajustes adicionales para tablas en móviles muy pequeños */
+  th, td {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+  }
+}
+
+/* Estilos específicos para tablas en gestion_pedidos.html y gestion_admin.html */
+/* Estos estilos se aplicarán automáticamente a todas las tablas */
+.container table,
+.content table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+/* Indicador visual de scroll horizontal */
+.table-scroll-indicator {
+  display: none;
+  text-align: center;
+  color: var(--text-light);
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .table-scroll-indicator {
+    display: block;
   }
 }
